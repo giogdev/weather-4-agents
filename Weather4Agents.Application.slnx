@@ -1,0 +1,18 @@
+<Solution>
+  <Folder Name="/Devops/">
+    <File Path=".github/workflows/pipeline.yml" />
+  </Folder>
+  <Folder Name="/docs/">
+    <File Path="docs/docker.md" />
+    <File Path="job.md" />
+  </Folder>
+  <Folder Name="/Elementi di soluzione/">
+    <File Path="CLAUDE.md" />
+    <File Path="README.md" />
+  </Folder>
+  <Project Path="Weather4Agents.API/Weather4Agents.API.csproj" />
+  <Project Path="Weather4Agents.Application/Weather4Agents.Application.csproj" />
+  <Project Path="Weather4Agents.Domain/Weather4Agents.Domain.csproj" />
+  <Project Path="Weather4Agents.Infrastructure/Weather4Agents.Infrastructure.csproj" />
+  <Project Path="Weather4Agents.Test/Weather4Agents.Test.csproj" Id="1a90e60a-3630-4d9b-9afd-afabeb18c51a" />
+</Solution>
