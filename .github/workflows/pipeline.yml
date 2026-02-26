@@ -2,14 +2,15 @@ name: Pipeline
 
 on:
   push:
-    branches: [ "master", "startup" ]
+    branches: [ "master" ]
     tags: [ "v*.*.*" ]
   pull_request:
-    branches: [ "master", "startup" ]
+    branches: [ "master" ]
 
 env:
   REGISTRY: docker.io
   IMAGE_NAME: giogdev/weather4agents
+  DOTNET_VERSION:  10.0.x
 
 jobs:
 
@@ -20,7 +21,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: ${{ env.DOTNET_VERSION }}
       - name: Restore dependencies
         run: dotnet restore
       - name: Build

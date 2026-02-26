@@ -1,18 +1,18 @@
-# Job e automatismi
-In questa pagina sono descritti i job 
+# Jobs and automation
+This page describes the scheduled jobs.
 
-## _WeatherScrapingJob_: scraping automatico
-**Può essere disabilitato**: ❌
+## _WeatherScrapingJob_: automatic scraping
+**Can be disabled**: ❌
 
-`WeatherScrapingJob` è un job automatico che gira ad un intervallo configurabile e si occupa di aggiornare i dati in cache del meteo. In questo modo tutte le funzionalità ell'applicazione leggeranno i dati pre-elaborati anzichè leggerli da web
+`WeatherScrapingJob` is an automatic job that runs at a configurable interval and updates the weather data cache. This way, all application features read pre-processed
+data instead of fetching it from the web. This improve performance.
 
-## _StorageJob_: salvataggio forecast su file system
-**Può essere disabilitato**: ✅
+## _StorageJob_: saving forecast to file system
+**Can be disabled**: ✅
 
-`WeatherFileStorageJob` è un background service opzionale che salva periodicamente i dati meteo come file JSON sul file system. È pensato per ambienti Docker dove gli agenti possono leggere i file direttamente, senza dover chiamare l'API.
+`WeatherFileStorageJob` is an optional background service that periodically saves weather data as JSON files to the file system. It's designed for Docker environments where agents can read files directly, without having to call the API.
 
-**Struttura delle directory:**
-
+**📁 Directory structure:**
 ```
 {OutputPath}/
 └── {location}/
@@ -20,8 +20,7 @@ In questa pagina sono descritti i job
     ├── 2026-02-27.json
     └── ...
 ```
-
-**Formato del file:**
+**📄File format:**
 
 ```json
 {
@@ -46,26 +45,15 @@ In questa pagina sono descritti i job
   }
 }
 ```
+The job overwrites existing files on each cycle. It uses the default provider and reads locations from the `WeatherScraping:Locations` section.
 
-Il job sovrascrive i file esistenti ad ogni ciclo. Usa il provider di default e legge le città dalla sezione `WeatherScraping:Locations`.
 
-### Configurazione
+## StorageJob: automatic cleanup of old files
+**Can be disabled**: ✅
 
-La funzionalità è **disabilitata per default**. Per attivarla, impostare `Enabled: true` nella sezione `WeatherFileStorage` dell'`appsettings.json`:
+When `CleanupEnabled` is `true`, at the end of each cycle the job iterates through all subdirectories of `OutputPath` and deletes `.json` files whose name (formatted as `yyyy-MM-dd`) is **older than yesterday**. 
 
-```json
-"WeatherFileStorage": {
-  "Enabled": true,
-  "OutputPath": "weather-data",
-  "JobIntervalMinutes": 60,
-  "CleanupEnabled": false
-}
-```
+Files from today and yesterday are always retained.
+Deletion errors are logged as `Warning` without interrupting the cycle.
+> ⚠️ Files that don't follow the `yyyy-MM-dd` naming format are ignored.
 
-## "StorageJob": pulizia automatica dei file vecchi
-**Può essere disabilitato**: ✅
-
-Quando `CleanupEnabled` è `true`, al termine di ogni ciclo il job scorre tutte le sottodirectory di `OutputPath` ed elimina i file `.json` il cui nome (formato `yyyy-MM-dd`) è **anteriore a ieri**. I file di oggi e di ieri vengono sempre mantenuti.
-
-Gli errori di cancellazione sono loggati come `Warning` senza interrompere il ciclo.
-> ⚠️ I file che non rispettano il formato di nome `yyyy-MM-dd` vengono ignorati. 

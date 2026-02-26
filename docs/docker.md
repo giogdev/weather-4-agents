@@ -6,16 +6,21 @@ Build the image from the solution root:
 
 ```bash
 docker build -t giogdev/weather4agents .
-```
-
-Build with a custom tag:
-
-```bash
 docker build -t giogdev/weather4agents:1.0.0 .
 docker build -t giogdev/weather4agents:latest .
 ```
 
 ## Run
+
+### Docker compose
+
+Run with default configuration:
+```bash
+docker-compose up -d
+```
+> ⚠️ Remember to set up your .env file (from .env.template)
+
+### Docker
 
 Run with default configuration:
 
