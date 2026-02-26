@@ -3,6 +3,7 @@ name: Pipeline
 on:
   push:
     branches: [ "master", "startup" ]
+    tags: [ "v*.*.*" ]
   pull_request:
     branches: [ "master", "startup" ]
 
@@ -34,6 +35,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            # push tag v1.2.3 → genera 1.2.3 / 1.2 / 1
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            # push su branch → short sha (es. sha-a3f8c2d)
+            type=sha,prefix=sha-,format=short
+            # latest solo sul branch di default (master)
+            type=raw,value=latest,enable={{is_default_branch}}
+
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
@@ -50,6 +66,5 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
-          tags: |
-            ${{ env.IMAGE_NAME }}:${{ github.sha }}
-            ${{ env.IMAGE_NAME }}:latest
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
