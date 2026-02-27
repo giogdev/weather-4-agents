@@ -2,10 +2,10 @@ name: Pipeline
 
 on:
   push:
-    branches: [ "master" ]
+    branches: [ "master", "test" ]
     tags: [ "v*.*.*" ]
   pull_request:
-    branches: [ "master" ]
+    branches: [ "master", "test" ]
 
 env:
   REGISTRY: docker.io
