@@ -5,7 +5,7 @@ I use this tool to display data in **Home Assistant** and to quickly provide wea
 For this second purpose, I generate JSON files with weather data, so that my agents know where to retrieve the information.
 
 ## Features
-- **REST API** — multi-day forecast and single-day weather, with support for multiple providers.
+- **REST API** — multi-day forecast and single-day weather, with support for multiple providers. Scalar UI available at `<endpoint>/scalar/v1`
 - **File system storage** — Saves the forecast to JSON files on the file system, see [dedicated section](docs/job.md).
 
 ## Getting started
@@ -33,3 +33,12 @@ Configurable parameters (.env)
 | [3bMeteo](https://www.3bmeteo.com) | `3bMeteo` | ✅ Implemented |
 ## Scheduled jobs
 [See the documentation here](docs/job.md)
+
+# Changelog
+## v1.0.1
+- Removed Mediatr dependency and implemented a base service to handle CQRS pattern
+- Improved appsettings loading for development mode
+- Docker image for arm64 (raspberry) and amd64
+## v1.0.0
+- Initial release
+

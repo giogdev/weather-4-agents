@@ -1,10 +1,10 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using MediatR;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Weather4Agents.Application.CQRS;
 using Weather4Agents.Application.Settings;
 using Weather4Agents.Application.UseCases.GetWeatherForecast;
 using Weather4Agents.Infrastructure.Models;
@@ -67,7 +67,7 @@ public class WeatherFileStorageJob : BackgroundService
             _storageSettings.OutputPath);
 
         using var scope = _scopeFactory.CreateScope();
-        var mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
+        var dispatcher = scope.ServiceProvider.GetRequiredService<IDispatcher>();
 
         foreach (var location in _scrapingSettings.Locations)
         {
@@ -76,7 +76,7 @@ public class WeatherFileStorageJob : BackgroundService
             try
             {
                 // Use default provider; forceRefresh=false reuses cached data when available.
-                var forecast = await mediator.Send(
+                var forecast = await dispatcher.SendAsync(
                     new GetWeatherForecastQuery(location, ProviderName: null), ct);
 
                 var days = forecast.ToList();
