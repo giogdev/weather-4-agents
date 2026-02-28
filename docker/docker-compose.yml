@@ -1,12 +1,12 @@
 services:
   weather4agents-api:
-    image: giogdev/weather4agents:latest
+    image: giogdev/weather4agents:1.0.1
     container_name: weather4agents-api
     ports:
       - "8080:8080"
     env_file:
       - .env
     volumes:
-      - C:/WeatherData:/app/weather-data
+      - C:\WeatherData:/app/weather-data
 
     restart: unless-stopped
