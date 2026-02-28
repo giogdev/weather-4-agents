@@ -1,5 +1,5 @@
-using MediatR;
 using Microsoft.AspNetCore.Mvc;
+using Weather4Agents.Application.CQRS;
 using Weather4Agents.Application.UseCases.GetDayWeather;
 using Weather4Agents.Application.UseCases.GetWeatherForecast;
 
@@ -9,18 +9,18 @@ namespace Weather4Agents.API.Controllers;
 [Route("api/weather")]
 public class WeatherController : ControllerBase
 {
-    private readonly IMediator _mediator;
+    private readonly IDispatcher _dispatcher;
 
-    public WeatherController(IMediator mediator)
+    public WeatherController(IDispatcher dispatcher)
     {
-        _mediator = mediator;
+        _dispatcher = dispatcher;
     }
 
     /// <summary>Retrieves the weather forecast using the default provider.</summary>
     [HttpGet("{location}")]
     public async Task<IActionResult> GetForecast(string location, CancellationToken ct)
     {
-        var result = await _mediator.Send(new GetWeatherForecastQuery(location, null), ct);
+        var result = await _dispatcher.SendAsync(new GetWeatherForecastQuery(location, null), ct);
         return Ok(result);
     }
 
@@ -30,7 +30,7 @@ public class WeatherController : ControllerBase
     {
         try
         {
-            var result = await _mediator.Send(new GetWeatherForecastQuery(location, provider), ct);
+            var result = await _dispatcher.SendAsync(new GetWeatherForecastQuery(location, provider), ct);
             return Ok(result);
         }
         catch (InvalidOperationException ex)
@@ -43,7 +43,7 @@ public class WeatherController : ControllerBase
     [HttpGet("{location}/day/{date}")]
     public async Task<IActionResult> GetDayWeather(string location, DateOnly date, CancellationToken ct)
     {
-        var result = await _mediator.Send(new GetDayWeatherQuery(location, date, null), ct);
+        var result = await _dispatcher.SendAsync(new GetDayWeatherQuery(location, date, null), ct);
         return result is null
             ? Problem(detail: $"No weather data found for '{location}' on {date:yyyy-MM-dd}.", statusCode: StatusCodes.Status404NotFound)
             : Ok(result);
@@ -55,7 +55,7 @@ public class WeatherController : ControllerBase
     {
         try
         {
-            var result = await _mediator.Send(new GetDayWeatherQuery(location, date, provider), ct);
+            var result = await _dispatcher.SendAsync(new GetDayWeatherQuery(location, date, provider), ct);
             return result is null
                 ? Problem(detail: $"No weather data found for '{location}' on {date:yyyy-MM-dd}.", statusCode: StatusCodes.Status404NotFound)
                 : Ok(result);

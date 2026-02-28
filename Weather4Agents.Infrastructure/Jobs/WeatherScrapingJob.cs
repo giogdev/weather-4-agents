@@ -1,8 +1,8 @@
-using MediatR;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Weather4Agents.Application.CQRS;
 using Weather4Agents.Application.Settings;
 using Weather4Agents.Application.UseCases.ScrapeAndCache;
 
@@ -38,7 +38,7 @@ public class WeatherScrapingJob : BackgroundService
         _logger.LogInformation("Weather scraping cycle started at {Time}", DateTimeOffset.UtcNow);
 
         using var scope = _scopeFactory.CreateScope();
-        var mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
+        var dispatcher = scope.ServiceProvider.GetRequiredService<IDispatcher>();
 
         foreach (var location in _settings.Locations)
         {
@@ -46,7 +46,7 @@ public class WeatherScrapingJob : BackgroundService
             {
                 try
                 {
-                    await mediator.Send(new ScrapeAndCacheCommand(location, provider), ct);
+                    await dispatcher.SendAsync(new ScrapeAndCacheCommand(location, provider), ct);
                     _logger.LogInformation("Scraped {Provider} / {Location}", provider, location);
                 }
                 catch (Exception ex)

@@ -57,3 +57,4 @@ nunit-*.xml
 .claude
 /.vs
 .env
+/Weather4Agents.API/appsettings.Development.json

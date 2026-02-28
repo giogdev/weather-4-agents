@@ -4,6 +4,14 @@ using Weather4Agents.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
 
+#if DEBUG
+builder.Configuration.AddJsonFile("appsettings.Development.json", optional: true, reloadOnChange: true);
+#endif
+
+#if RELEASE
+builder.Configuration.AddJsonFile("appsettings.Release.json", optional: true, reloadOnChange: true);
+#endif
+
 builder.Services.AddControllers();
 builder.Services.AddOpenApi(options =>
 {

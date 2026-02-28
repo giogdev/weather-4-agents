@@ -1,9 +1,9 @@
-using MediatR;
+using Weather4Agents.Application.CQRS;
 using Weather4Agents.Application.Interfaces.Scrapers;
 
 namespace Weather4Agents.Application.UseCases.ScrapeAndCache;
 
-public class ScrapeAndCacheHandler : IRequestHandler<ScrapeAndCacheCommand>
+public class ScrapeAndCacheHandler : ICommandHandler<ScrapeAndCacheCommand>
 {
     private readonly IWeatherProviderResolver _resolver;
 
@@ -12,9 +12,9 @@ public class ScrapeAndCacheHandler : IRequestHandler<ScrapeAndCacheCommand>
         _resolver = resolver;
     }
 
-    public async Task Handle(ScrapeAndCacheCommand request, CancellationToken ct)
+    public async Task HandleAsync(ScrapeAndCacheCommand command, CancellationToken ct)
     {
-        var scraper = _resolver.GetByName(request.ProviderName);
-        await scraper.GetForecastAsync(request.Location, forceRefresh: true, ct);
+        var scraper = _resolver.GetByName(command.ProviderName);
+        await scraper.GetForecastAsync(command.Location, forceRefresh: true, ct);
     }
 }
