@@ -19,5 +19,8 @@ namespace Weather4Agents.Domain.Enums
         public const string Sleet = "Sleet";
         public const string Hail = "Hail";
         public const string Windy = "Windy";
+        public const string HeavyWindy = "HeavyWindy";
+
+        public const string ProbablyRainy = "ProbablyRainy";
     }
 }

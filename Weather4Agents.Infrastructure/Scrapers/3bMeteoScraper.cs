@@ -210,10 +210,11 @@ public partial class Meteo3bScraper : BaseWeatherScraper
         if (d.Contains("pioggia") || d.Contains("rovescio") || d.Contains("pioggere")) return WeatherType.Rainy;
         if (d.Contains("nebbia") || d.Contains("foschia")) return WeatherType.Foggy;
         if (d.Contains("coperto")) return WeatherType.Overcast;
-        if (d.Contains("parz") || d.Contains("poco nuvoloso") || d.Contains("variabile")) return WeatherType.PartlyCloudy;
+        if (d.Contains("parz") || d.Contains("parz nuvoloso") || d.Contains("poco nuvoloso") || d.Contains("variabile") || d.Contains("nubi sparse")) return WeatherType.PartlyCloudy;
         if (d.Contains("nuvoloso")) return WeatherType.Cloudy;
         if (d.Contains("sereno") || d.Contains("soleggiato")) return WeatherType.Sunny;
-        if (d.Contains("vento forte")) return WeatherType.Windy;
+        if (d.Contains("vento forte")) return WeatherType.HeavyWindy;
+        if (d.Contains("possibili piogge")) return WeatherType.ProbablyRainy;
 
         return WeatherType.Unknown;
     }
