@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Weather4Agents.Application.CQRS;
 using Weather4Agents.Application.UseCases.GetDayWeather;
 using Weather4Agents.Application.UseCases.GetWeatherForecast;
+using Weather4Agents.Application.UseCases.GetWeekForecast;
 
 namespace Weather4Agents.API.Controllers;
 
@@ -31,6 +32,29 @@ public class WeatherController : ControllerBase
         try
         {
             var result = await _dispatcher.SendAsync(new GetWeatherForecastQuery(location, provider), ct);
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Problem(detail: ex.Message, statusCode: StatusCodes.Status404NotFound);
+        }
+    }
+
+    /// <summary>Retrieves the 7-day weather forecast using the default provider.</summary>
+    [HttpGet("{location}/forecast/week")]
+    public async Task<IActionResult> GetWeekForecast(string location, CancellationToken ct)
+    {
+        var result = await _dispatcher.SendAsync(new GetWeekForecastQuery(location, null), ct);
+        return Ok(result);
+    }
+
+    /// <summary>Retrieves the 7-day weather forecast using the specified provider.</summary>
+    [HttpGet("{location}/{provider}/forecast/week")]
+    public async Task<IActionResult> GetWeekForecastByProvider(string location, string provider, CancellationToken ct)
+    {
+        try
+        {
+            var result = await _dispatcher.SendAsync(new GetWeekForecastQuery(location, provider), ct);
             return Ok(result);
         }
         catch (InvalidOperationException ex)
