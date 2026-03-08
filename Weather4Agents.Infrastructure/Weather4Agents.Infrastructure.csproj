@@ -10,6 +10,7 @@
     <PackageReference Include="Microsoft.Extensions.Caching.Hybrid" Version="10.3.0" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.3" />
     <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.3" />
+    <PackageReference Include="MQTTnet" Version="4.3.7.1207" />
   </ItemGroup>
 
   <PropertyGroup>

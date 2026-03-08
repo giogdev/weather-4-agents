@@ -3,6 +3,8 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Weather4Agents.Application.Interfaces.Scrapers;
 using Weather4Agents.Application.Settings;
+using Weather4Agents.Application.Settings.Integrations;
+using Weather4Agents.Infrastructure.Integrations.HomeAssistant;
 using Weather4Agents.Infrastructure.Jobs;
 using Weather4Agents.Infrastructure.Resolvers;
 using Weather4Agents.Infrastructure.Scrapers;
@@ -38,6 +40,11 @@ public static class DependencyInjection
 
         services.Configure<WeatherFileStorageSettings>(
             configuration.GetSection(WeatherFileStorageSettings.SectionName));
+
+        services.Configure<HomeAssistantIntegrationSettings>(
+            configuration.GetSection(HomeAssistantIntegrationSettings.SectionName));
+
+        services.AddTransient<IHomeAssistantIntegration, HomeAssistantIntegration>();
 
         services.AddHostedService<WeatherScrapingJob>();
         services.AddHostedService<WeatherFileStorageJob>();

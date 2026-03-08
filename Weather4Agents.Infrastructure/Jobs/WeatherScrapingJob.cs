@@ -4,7 +4,9 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Weather4Agents.Application.CQRS;
 using Weather4Agents.Application.Settings;
+using Weather4Agents.Application.UseCases.GetWeatherForecast;
 using Weather4Agents.Application.UseCases.ScrapeAndCache;
+using Weather4Agents.Infrastructure.Integrations.HomeAssistant;
 
 namespace Weather4Agents.Infrastructure.Jobs;
 
@@ -39,6 +41,7 @@ public class WeatherScrapingJob : BackgroundService
 
         using var scope = _scopeFactory.CreateScope();
         var dispatcher = scope.ServiceProvider.GetRequiredService<IDispatcher>();
+        var haIntegration = scope.ServiceProvider.GetRequiredService<IHomeAssistantIntegration>();
 
         foreach (var location in _settings.Locations)
         {
@@ -53,6 +56,18 @@ public class WeatherScrapingJob : BackgroundService
                 {
                     _logger.LogError(ex, "Failed to scrape {Provider} / {Location}", provider, location);
                 }
+            }
+
+            try
+            {
+                var forecast = await dispatcher.SendAsync(
+                    new GetWeatherForecastQuery(location, ProviderName: null), ct);
+
+                await haIntegration.PublishWeatherAsync(location, forecast, ct);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogError(ex, "Failed to publish HA weather update for '{Location}'", location);
             }
         }
 
