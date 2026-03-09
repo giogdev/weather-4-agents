@@ -1,6 +1,12 @@
-# Weather4Agents — Home Assistant Integration
+# Weather4Agents — Home Assistant integration
 
-Custom integration for [Home Assistant](https://www.home-assistant.io/) that populates a native `weather` entity by consuming the Weather4Agents REST API.
+ℹ️ Custom integration for [Home Assistant](https://www.home-assistant.io/) that populates a native `weather` entity by consuming the Weather4Agents REST API.
+
+<p align="center">
+  <img src="../../docs/images/HA-weather.png" width="45%" />
+  &nbsp;&nbsp;
+  <img src="../../docs/images/HA-weather-2.png" width="45%" />
+</p>
 
 ## Features
 
@@ -9,6 +15,10 @@ Custom integration for [Home Assistant](https://www.home-assistant.io/) that pop
 - Hourly forecast for all available days
 - Fully configured from the HA UI — no YAML required
 - Local polling (`iot_class: local_polling`) — works without internet access
+
+## Workflow
+<img src="../../docs/images/HA-workflow.png" alt="workflow">
+
 
 ## Requirements
 
@@ -25,21 +35,25 @@ Custom integration for [Home Assistant](https://www.home-assistant.io/) that pop
 
    Typical locations:
    - `/config/custom_components/weather4agents/` (HA OS / Supervised)
-   - `~/.homeassistant/custom_components/weather4agents/` (manual install)
+   - `~/.homeassistant/custom_components/weather4agents/` (docker / manual install)
 
 2. Restart Home Assistant.
 
 3. Go to **Settings → Integrations → Add Integration** and search for **Weather4Agents**.
+
+
 
 4. Fill in the configuration form:
 
    | Field | Description | Example |
    |-------|-------------|---------|
    | API Base URL | Full URL of the Weather4Agents API | `http://192.168.1.10:8080` |
-   | Location | City name configured in the API | `nembro` |
+   | Location | City name configured in the API | `bergamo` |
    | Update interval | Refresh frequency in minutes (5–1440) | `60` |
 
-5. Click **Submit**. The `weather.weather4agents_<location>` entity will appear shortly.
+<img src="../../docs/images/HA-configuration.png" alt="configuration">
+
+5. Click **Submit**.
 
 ## Docker networking note
 
