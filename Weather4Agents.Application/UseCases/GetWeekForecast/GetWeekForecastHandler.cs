@@ -23,7 +23,7 @@ public class GetWeekForecastHandler : IQueryHandler<GetWeekForecastQuery, WeekFo
 
         var today = DateOnly.FromDateTime(DateTime.Today);
         var forecast = allDays
-            .Where(d => d.Date > today)
+            .Where(d => d.Date >= today)
             .OrderBy(d => d.Date)
             .Take(7)
             .Select(d => new DayForecastEntry
