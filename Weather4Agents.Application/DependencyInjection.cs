@@ -1,7 +1,9 @@
 using Microsoft.Extensions.DependencyInjection;
 using Weather4Agents.Application.CQRS;
+using Weather4Agents.Application.DTOs;
 using Weather4Agents.Application.UseCases.GetDayWeather;
 using Weather4Agents.Application.UseCases.GetWeatherForecast;
+using Weather4Agents.Application.UseCases.GetWeekForecast;
 using Weather4Agents.Application.UseCases.ScrapeAndCache;
 using Weather4Agents.Domain.Entities;
 
@@ -15,6 +17,7 @@ public static class DependencyInjection
 
         services.AddScoped<IQueryHandler<GetWeatherForecastQuery, IEnumerable<DayWeather>>, GetWeatherForecastHandler>();
         services.AddScoped<IQueryHandler<GetDayWeatherQuery, DayWeather?>, GetDayWeatherHandler>();
+        services.AddScoped<IQueryHandler<GetWeekForecastQuery, WeekForecastResponse>, GetWeekForecastHandler>();
         services.AddScoped<ICommandHandler<ScrapeAndCacheCommand>, ScrapeAndCacheHandler>();
 
         return services;

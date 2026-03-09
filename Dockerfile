@@ -1,9 +1,11 @@
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS base
-USER $APP_UID
+LABEL org.opencontainers.image.title="Weather4Agents" \
+      org.opencontainers.image.description="Middleware that enables agents to receive weather information"
+USER app
 WORKDIR /app
 EXPOSE 8080
 
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS publish
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
 
@@ -16,11 +18,11 @@ RUN dotnet restore "Weather4Agents.API/Weather4Agents.API.csproj"
 
 COPY . .
 
-RUN dotnet build "Weather4Agents.API/Weather4Agents.API.csproj" -c $BUILD_CONFIGURATION -o /app/build
-
-FROM build AS publish
-ARG BUILD_CONFIGURATION=Release
-RUN dotnet publish "Weather4Agents.API/Weather4Agents.API.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
+RUN dotnet publish "Weather4Agents.API/Weather4Agents.API.csproj" \
+    -c $BUILD_CONFIGURATION \
+    --no-restore \
+    -o /app/publish \
+    /p:UseAppHost=false
 
 FROM base AS final
 WORKDIR /app
