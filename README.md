@@ -47,6 +47,9 @@ Alternatively you can use APIs
 Yu can consume APIs to get weather data
 
 # Changelog
+## v1.0.2
+- Fixed bug with mapping of word "velature sparse" (3bmeteo)
+- Custom integration for Home Assistant (Integrations/HomeAssistant)
 ## v1.0.1
 - Removed Mediatr dependency and implemented a base service to handle CQRS pattern
 - Improved appsettings loading for development mode
