@@ -362,7 +362,8 @@ public partial class Meteo3bScraper : BaseWeatherScraper
         if (d.Contains("sereno") || d.Contains("soleggiato")) return WeatherType.Sunny;
         if (d.Contains("vento forte")) return WeatherType.HeavyWindy;
         if (d.Contains("possibili piogge")) return WeatherType.ProbablyRainy;
-        if (d.Contains("velature sparse")) return WeatherType.LightClouds;
+        // velature estese, velature sparse
+        if (d.Contains("velature")) return WeatherType.LightClouds;
         //
 
         return WeatherType.Unknown;

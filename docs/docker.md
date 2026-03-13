@@ -1,15 +1,5 @@
 # Docker
 
-## Build
-
-Build the image from the solution root:
-
-```bash
-docker build -t giogdev/weather4agents .
-docker build -t giogdev/weather4agents:1.0.0 .
-docker build -t giogdev/weather4agents:latest .
-```
-
 ## Run
 
 ### Docker compose
@@ -40,4 +30,14 @@ docker run -p 8080:8080 \
   -e WeatherFileStorage__JobIntervalMinutes=60 \
   -v ./weather-data:/data/weather \
   giogdev/weather4agents
+```
+
+## Build
+
+Build the image from the solution root:
+
+```bash
+docker build -t giogdev/weather4agents .
+docker build -t giogdev/weather4agents:1.0.0 .
+docker build -t giogdev/weather4agents:latest .
 ```
