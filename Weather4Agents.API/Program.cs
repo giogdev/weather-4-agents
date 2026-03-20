@@ -1,4 +1,5 @@
 using Scalar.AspNetCore;
+using Weather4Agents.API.OpenApi;
 using Weather4Agents.Application;
 using Weather4Agents.Infrastructure;
 
@@ -15,11 +16,18 @@ builder.Configuration.AddJsonFile("appsettings.Release.json", optional: true, re
 builder.Services.AddControllers();
 builder.Services.AddOpenApi(options =>
 {
+    options.AddOperationTransformer(new XmlDocumentationTransformer());
+    options.AddSchemaTransformer(new XmlDocumentationSchemaTransformer());
     options.AddDocumentTransformer((document, _, _) =>
     {
         document.Info.Title = "Weather4Agents API";
         document.Info.Version = "v1";
-        document.Info.Description = "Middleware API to retrieve weather forecast data for AI agents.";
+        document.Info.Description = "Middleware API to retrieve weather forecast data for AI agents or custom integrations";
+        document.Info.Contact = new()
+        {
+            Name = "@giogdev",
+            Url = new Uri("https://github.com/giogdev/weather-4-agents"),
+        };
         return Task.CompletedTask;
     });
 });
@@ -41,8 +49,8 @@ app.MapScalarApiReference(options =>
     options.Theme = ScalarTheme.DeepSpace;
 });
 
-app.UseHttpsRedirection();
-app.UseAuthorization();
+//app.UseHttpsRedirection();
+//app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
