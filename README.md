@@ -1,7 +1,7 @@
 # Weather4Agents 🤖
 Tool developed to scrape weather data from your favourite weather website.
 
-I use this tool to display data in **Home Assistant** and to quickly provide weather data to my agents (e.g. 🦞 **OpenClaw**), without consuming too many tokens.
+I use this tool to display data in **Home Assistant** and to quickly provide weather data to my agents (e.g. 🦞 **OpenClaw** or n8n), without consuming too many tokens.
 For this second purpose, I generate JSON files with weather data, so that my agents know where to retrieve the information.
 
 ## Features
@@ -46,7 +46,12 @@ Alternatively you can use APIs
 ## n8n
 Yu can consume APIs to get weather data
 
+![alt text](./docs/images/n8n-integration.png)
+
 # Changelog
+## v1.0.3
+- OpenApi definitions in `<endpoint>/openapi/v1.json`
+- Refactoring of api endpoints definitions
 ## v1.0.2
 - Fixed bug with mapping of word "velature sparse" (3bmeteo)
 - Custom integration for Home Assistant (Integrations/HomeAssistant)
