@@ -1,6 +1,6 @@
 services:
   weather4agents-api:
-    image: giogdev/weather4agents:1.0.1
+    image: giogdev/weather4agents:latest
     container_name: weather4agents-api
     ports:
       - "8080:8080"
