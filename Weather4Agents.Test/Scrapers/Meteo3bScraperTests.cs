@@ -27,66 +27,70 @@ public class Meteo3bScraperTests
         return (DayWeather)method!.Invoke(scraper, [html, date])!;
     }
 
-    private static string ProbabilisticHtml =>
-        File.ReadAllText(Path.Combine("ProviderExamples", "3bmeteo-response-probabilistic-12.html"));
+    private static string Complete1Html =>
+        File.ReadAllText(Path.Combine("ProviderExamples", "3bmeteo-complete1.html"));
+
+    private static string Complete3Html =>
+        File.ReadAllText(Path.Combine("ProviderExamples", "3bmeteo-complete3.html"));
+
+    private static string ComplicatedHtml =>
+        File.ReadAllText(Path.Combine("ProviderExamples", "3bmeteo-complicated1.html"));
 
     // -------------------------------------------------------------------------
-    // Non-regression: existing hourly pages must continue to work
+    // Hourly page — slot count and ordering
     // -------------------------------------------------------------------------
 
     [Fact]
-    public void ParseDayPage_WithSampleHtml_Returns13HourlyForecasts()
+    public void ParseDayPage_WithCompleteHtml_Returns24HourlyForecasts()
     {
         var scraper = CreateScraper();
-        var html = File.ReadAllText(Path.Combine("ProviderExamples", "3bmeteo-response-13.html"));
 
-        var result = InvokeParseDayPage(scraper, html, new DateOnly(2026, 2, 26));
-
-        Assert.Equal(13, result.HoursDetails.Count);
-    }
-
-    [Fact]
-    public void ParseDayPage_WithSampleHtml_Returns24HourlyForecasts()
-    {
-        var scraper = CreateScraper();
-        var html = File.ReadAllText(Path.Combine("ProviderExamples", "3bmeteo-response-24.html"));
-
-        var result = InvokeParseDayPage(scraper, html, new DateOnly(2026, 2, 26));
+        var result = InvokeParseDayPage(scraper, Complete1Html, new DateOnly(2026, 5, 14));
 
         Assert.Equal(24, result.HoursDetails.Count);
     }
 
     [Fact]
-    public void ParseDayPage_WithStandardHtml_DoesNotReturnFourSlots()
+    public void ParseDayPage_WithCompleteHtml_SlotsAreOrderedByTimeFrom()
     {
         var scraper = CreateScraper();
-        var html = File.ReadAllText(Path.Combine("ProviderExamples", "3bmeteo-response-13.html"));
 
-        var result = InvokeParseDayPage(scraper, html, new DateOnly(2026, 2, 26));
+        var result = InvokeParseDayPage(scraper, Complete1Html, new DateOnly(2026, 5, 14));
+
+        var times = result.HoursDetails.Select(h => h.TimeFrom).ToList();
+        Assert.Equal([.. times.OrderBy(t => t)], times);
+    }
+
+    [Fact]
+    public void ParseDayPage_WithCompleteHtml_DoesNotReturnFourSlots()
+    {
+        var scraper = CreateScraper();
+
+        var result = InvokeParseDayPage(scraper, Complete1Html, new DateOnly(2026, 5, 14));
 
         Assert.NotEqual(4, result.HoursDetails.Count);
     }
 
     // -------------------------------------------------------------------------
-    // Probabilistic page detection and slot parsing
+    // Complicated page — slot count, time ranges, reliability
     // -------------------------------------------------------------------------
 
     [Fact]
-    public void ParseDayPage_WithProbabilisticHtml_ReturnsFourSlots()
+    public void ParseDayPage_WithComplicatedHtml_ReturnsFourEsaSlots()
     {
         var scraper = CreateScraper();
 
-        var result = InvokeParseDayPage(scraper, ProbabilisticHtml, new DateOnly(2026, 3, 20));
+        var result = InvokeParseDayPage(scraper, ComplicatedHtml, new DateOnly(2026, 5, 16));
 
         Assert.Equal(4, result.HoursDetails.Count);
     }
 
     [Fact]
-    public void ParseDayPage_WithProbabilisticHtml_SlotsHaveCorrectTimeRanges()
+    public void ParseDayPage_WithComplicatedHtml_SlotsHaveCorrectTimeRanges()
     {
         var scraper = CreateScraper();
 
-        var result = InvokeParseDayPage(scraper, ProbabilisticHtml, new DateOnly(2026, 3, 20));
+        var result = InvokeParseDayPage(scraper, ComplicatedHtml, new DateOnly(2026, 5, 16));
 
         Assert.Equal(new TimeOnly(0,  0), result.HoursDetails[0].TimeFrom);
         Assert.Equal(new TimeOnly(6,  0), result.HoursDetails[0].TimeTo);
@@ -99,297 +103,219 @@ public class Meteo3bScraperTests
     }
 
     [Fact]
-    public void ParseDayPage_WithProbabilisticHtml_SlotsAreOrderedByTimeFrom()
+    public void ParseDayPage_WithComplicatedHtml_AllSlotsHaveReliabilityTwenty()
     {
         var scraper = CreateScraper();
 
-        var result = InvokeParseDayPage(scraper, ProbabilisticHtml, new DateOnly(2026, 3, 20));
-
-        var times = result.HoursDetails.Select(h => h.TimeFrom).ToList();
-        Assert.Equal([.. times.OrderBy(t => t)], times);
-    }
-
-    // -------------------------------------------------------------------------
-    // ReliabilityPerc
-    // -------------------------------------------------------------------------
-
-    [Fact]
-    public void ParseDayPage_WithProbabilisticHtml_AllSlotsHaveReliabilityTwenty()
-    {
-        var scraper = CreateScraper();
-
-        var result = InvokeParseDayPage(scraper, ProbabilisticHtml, new DateOnly(2026, 3, 20));
+        var result = InvokeParseDayPage(scraper, ComplicatedHtml, new DateOnly(2026, 5, 16));
 
         Assert.All(result.HoursDetails, h => Assert.Equal(20, h.ReliabilityPerc));
     }
 
-    [Fact]
-    public void ParseDayPage_WithStandardHtml_ReliabilityParsedFromAttendibilitaRange()
-    {
-        var scraper = CreateScraper();
-        // Minimal HTML replicating the real div.perc > small structure used by 3bmeteo
-        var html = """
-            <html><body>
-              <div class="perc pull-right">Attendibilità <small>90-95% - Molto alta</small></div>
-              <div class="row-table noPad">
-                <div class="row-table special_campaign">
-                  <div class="big">10<span>:00</span></div>
-                  <img alt="Sereno" />
-                </div>
-                <div class="col-sm-3-5">
-                  <div class="big"><span class="switchcelsius">18</span></div>
-                  <div class="altriDati-precipitazioni"><span class="gray">assenti</span></div>
-                  <div class="altriDati-venti"><span class="switchkm">10 km/h</span> N</div>
-                  <div class="altriDati-umidita">50%</div>
-                  <div class="altriDati-pressione">1015mbar</div>
-                </div>
-              </div>
-            </body></html>
-            """;
+    // -------------------------------------------------------------------------
+    // Reliability
+    // -------------------------------------------------------------------------
 
-        var result = InvokeParseDayPage(scraper, html, new DateOnly(2026, 3, 20));
+    [Fact]
+    public void ParseDayPage_WithCompleteHtml1_ReliabilityIs90()
+    {
+        // 3bmeteo-complete1.html footer shows "90%"
+        var scraper = CreateScraper();
+
+        var result = InvokeParseDayPage(scraper, Complete1Html, new DateOnly(2026, 5, 14));
 
         Assert.NotEmpty(result.HoursDetails);
-        Assert.All(result.HoursDetails, h => Assert.Equal(92, h.ReliabilityPerc));
+        Assert.All(result.HoursDetails, h => Assert.Equal(90, h.ReliabilityPerc));
     }
 
     [Fact]
-    public void ParseDayPage_WithStandardHtml_ReliabilityParsedFromAttendibilitaSingleValue()
+    public void ParseDayPage_WithCompleteHtml3_ReliabilityIs95()
     {
+        // 3bmeteo-complete3.html footer shows "95%"
         var scraper = CreateScraper();
-        var html = """
-            <html><body>
-              <div class="perc pull-right">Attendibilità <small>70% - Alta</small></div>
-              <div class="row-table noPad">
-                <div class="row-table special_campaign">
-                  <div class="big">10<span>:00</span></div>
-                  <img alt="Sereno" />
-                </div>
-                <div class="col-sm-3-5">
-                  <div class="big"><span class="switchcelsius">18</span></div>
-                  <div class="altriDati-precipitazioni"><span class="gray">assenti</span></div>
-                  <div class="altriDati-venti"><span class="switchkm">10 km/h</span> N</div>
-                  <div class="altriDati-umidita">50%</div>
-                  <div class="altriDati-pressione">1015mbar</div>
-                </div>
-              </div>
-            </body></html>
-            """;
 
-        var result = InvokeParseDayPage(scraper, html, new DateOnly(2026, 3, 20));
+        var result = InvokeParseDayPage(scraper, Complete3Html, new DateOnly(2026, 5, 14));
 
         Assert.NotEmpty(result.HoursDetails);
-        Assert.All(result.HoursDetails, h => Assert.Equal(70, h.ReliabilityPerc));
+        Assert.All(result.HoursDetails, h => Assert.Equal(95, h.ReliabilityPerc));
     }
 
     [Fact]
-    public void ParseDayPage_WithHtmlWithoutPercDiv_ReliabilityDefaultsTo100()
+    public void ParseDayPage_WithNoReliabilityFooter_DefaultsTo100()
     {
         var scraper = CreateScraper();
-        // Minimal hourly HTML with no div.perc element — reliability must default to 100
         var html = """
             <html><body>
-              <div class="row-table noPad">
-                <div class="row-table special_campaign">
-                  <div class="big">10<span>:00</span></div>
-                  <img alt="Sereno" />
-                </div>
-                <div class="col-sm-3-5">
-                  <div class="big"><span class="switchcelsius">18</span></div>
-                  <div class="altriDati-precipitazioni"><span class="gray">assenti</span></div>
-                  <div class="altriDati-venti"><span class="switchkm">10 km/h</span> N</div>
-                  <div class="altriDati-umidita">50%</div>
-                  <div class="altriDati-pressione">1015mbar</div>
-                </div>
+              <input type="radio" id="tab-orario" checked>
+              <div id="content-orario" class="content-panel active">
+                <ul class="fc-accordion-list">
+                  <li class="fc-accordion-item" id="10">
+                    <button>
+                      <div class="fc-accordion-header">
+                        <div class="to-left">
+                          <span class="ds-body-medium ds-forecast-time">10</span>
+                          <div class="fc-accordion-condition">
+                            <span class="ds-body-medium">sereno</span>
+                          </div>
+                        </div>
+                        <div class="to-right">
+                          <span class="ds-heading-medium unit-temp" data-temp-c="18">18°</span>
+                          <span class="ds-body-small unit-wind" data-wind-kmh="10" data-wind-dir="N">10 km/h N</span>
+                        </div>
+                      </div>
+                    </button>
+                    <div class="dropdown fc-accordion-details">
+                      <div class="fc-accordion-summary-mobile ds-label-medium">Sereno</div>
+                      <ul class="fc-accordion-grid">
+                        <li data-param="precipitazioni"><span class="ds-body-small ds-text-secondary">Acc.</span><span class="ds-label-medium">0 mm</span></li>
+                        <li data-param="umidita"><span class="ds-body-small ds-text-secondary">Umidità</span><span class="ds-label-medium">50%</span></li>
+                        <li data-param="pressione"><span class="ds-body-small ds-text-secondary">Pressione</span><span class="ds-label-medium">1015 mb</span></li>
+                      </ul>
+                    </div>
+                  </li>
+                </ul>
               </div>
             </body></html>
             """;
 
-        var result = InvokeParseDayPage(scraper, html, new DateOnly(2026, 3, 20));
+        var result = InvokeParseDayPage(scraper, html, new DateOnly(2026, 5, 14));
 
         Assert.NotEmpty(result.HoursDetails);
         Assert.All(result.HoursDetails, h => Assert.Equal(100, h.ReliabilityPerc));
     }
 
     // -------------------------------------------------------------------------
-    // ReliabilityPerc extracted from real HTML files
-    // -------------------------------------------------------------------------
-
-    [Fact]
-    public void ParseDayPage_WithStandardHtml13_ReliabilityIs92()
-    {
-        // 3bmeteo-response-13.html has "90-95% - Molto alta" → average = 92
-        var scraper = CreateScraper();
-        var html = File.ReadAllText(Path.Combine("ProviderExamples", "3bmeteo-response-13.html"));
-
-        var result = InvokeParseDayPage(scraper, html, new DateOnly(2026, 2, 26));
-
-        Assert.NotEmpty(result.HoursDetails);
-        Assert.All(result.HoursDetails, h => Assert.Equal(92, h.ReliabilityPerc));
-    }
-
-    [Fact]
-    public void ParseDayPage_WithStandardHtml24_ReliabilityIs92()
-    {
-        // 3bmeteo-response-24.html has "90-95% - Molto alta" → average = 92
-        var scraper = CreateScraper();
-        var html = File.ReadAllText(Path.Combine("ProviderExamples", "3bmeteo-response-24.html"));
-
-        var result = InvokeParseDayPage(scraper, html, new DateOnly(2026, 2, 26));
-
-        Assert.NotEmpty(result.HoursDetails);
-        Assert.All(result.HoursDetails, h => Assert.Equal(92, h.ReliabilityPerc));
-    }
-
-    [Fact]
-    public void ParseDayPage_WithStandardHtml14_ReliabilityIs50()
-    {
-        // 3bmeteo-response-14.html has "<50% - Molto bassa" → single match extracts 50
-        var scraper = CreateScraper();
-        var html = File.ReadAllText(Path.Combine("ProviderExamples", "3bmeteo-response-14.html"));
-
-        var result = InvokeParseDayPage(scraper, html, new DateOnly(2026, 2, 26));
-
-        Assert.NotEmpty(result.HoursDetails);
-        Assert.All(result.HoursDetails, h => Assert.Equal(50, h.ReliabilityPerc));
-    }
-
-    // -------------------------------------------------------------------------
-    // Precipitation values from 3bmeteo-response-14.html
-    //
-    // PrecipitationMm stores the raw mm value as double:
-    //   01:00 → 1.1 mm → 1.1
-    //   05:00 → 0.7 mm → 0.7
-    //   09:00 → 0.2 mm → 0.2
-    //   14:00 → assenti  → 0.0
+    // Data correctness — complete1.html hour 00
+    //   temp=10, precip=0mm, wind=6km/h NE, humidity=65%, pressure=1004mb
     // -------------------------------------------------------------------------
 
     private static HoursWeatherDetails GetHourSlot(DayWeather day, int hour) =>
         day.HoursDetails.Single(h => h.TimeFrom.Hour == hour);
 
     [Fact]
-    public void ParseDayPage_WithStandardHtml14_AtHour01_PrecipitationIs1()
+    public void ParseDayPage_WithCompleteHtml_Hour00_TemperatureIs10()
     {
-        // 01:00 has "1.1 mm" in the div → ParsePrecipitation extracts 1.1
         var scraper = CreateScraper();
-        var html = File.ReadAllText(Path.Combine("ProviderExamples", "3bmeteo-response-14.html"));
 
-        var result = InvokeParseDayPage(scraper, html, new DateOnly(2026, 2, 26));
-        var slot = GetHourSlot(result, 1);
+        var result = InvokeParseDayPage(scraper, Complete1Html, new DateOnly(2026, 5, 14));
 
-        Assert.Equal(1.1, slot.PrecipitationMm);
+        Assert.Equal(10, GetHourSlot(result, 0).TemperatureC);
     }
 
     [Fact]
-    public void ParseDayPage_WithStandardHtml14_AtHour05_PrecipitationIsZero()
+    public void ParseDayPage_WithCompleteHtml_Hour00_PrecipitationIsZero()
     {
-        // 05:00 has "0.7 mm" in the div → ParsePrecipitation extracts 0.7
         var scraper = CreateScraper();
-        var html = File.ReadAllText(Path.Combine("ProviderExamples", "3bmeteo-response-14.html"));
 
-        var result = InvokeParseDayPage(scraper, html, new DateOnly(2026, 2, 26));
-        var slot = GetHourSlot(result, 5);
+        var result = InvokeParseDayPage(scraper, Complete1Html, new DateOnly(2026, 5, 14));
 
-        Assert.Equal(0.7, slot.PrecipitationMm);
+        Assert.Equal(0.0, GetHourSlot(result, 0).PrecipitationMm);
     }
 
     [Fact]
-    public void ParseDayPage_WithStandardHtml14_AtHour09_PrecipitationIsZero()
+    public void ParseDayPage_WithCompleteHtml_Hour00_WindIs6KmhNE()
     {
-        // 09:00 has "0.2 mm" → ParsePrecipitation extracts 0.2
         var scraper = CreateScraper();
-        var html = File.ReadAllText(Path.Combine("ProviderExamples", "3bmeteo-response-14.html"));
 
-        var result = InvokeParseDayPage(scraper, html, new DateOnly(2026, 2, 26));
-        var slot = GetHourSlot(result, 9);
+        var result = InvokeParseDayPage(scraper, Complete1Html, new DateOnly(2026, 5, 14));
+        var slot = GetHourSlot(result, 0);
 
-        Assert.Equal(0.2, slot.PrecipitationMm);
+        Assert.Equal(6, slot.WindKmh);
+        Assert.Equal("NE", slot.WindDirection);
     }
 
     [Fact]
-    public void ParseDayPage_WithStandardHtml14_AtHour14_PrecipitationIsZero()
+    public void ParseDayPage_WithCompleteHtml_Hour00_HumidityIs65()
     {
-        // 14:00 has "assenti" (span.gray) → 0.0
         var scraper = CreateScraper();
-        var html = File.ReadAllText(Path.Combine("ProviderExamples", "3bmeteo-response-14.html"));
 
-        var result = InvokeParseDayPage(scraper, html, new DateOnly(2026, 2, 26));
-        var slot = GetHourSlot(result, 14);
+        var result = InvokeParseDayPage(scraper, Complete1Html, new DateOnly(2026, 5, 14));
 
-        Assert.Equal(0.0, slot.PrecipitationMm);
+        Assert.Equal(65, GetHourSlot(result, 0).HumidityPerc);
+    }
+
+    [Fact]
+    public void ParseDayPage_WithCompleteHtml_Hour00_PressureIs1004()
+    {
+        var scraper = CreateScraper();
+
+        var result = InvokeParseDayPage(scraper, Complete1Html, new DateOnly(2026, 5, 14));
+
+        Assert.Equal(1004, GetHourSlot(result, 0).PressionMbar);
     }
 
     // -------------------------------------------------------------------------
-    // Data correctness of the 4 slots (values from 3bmeteo-response-probabilistic-12.html)
+    // Data correctness — complicated1.html slot 0 (Notte 00-06)
+    //   temp=10, precip=5.4mm, wind=8km/h NNO, humidity=93%, pressure=1001mb
     // -------------------------------------------------------------------------
 
     [Fact]
-    public void ParseDayPage_WithProbabilisticHtml_NotteSlotHasCorrectTemperature()
+    public void ParseDayPage_WithComplicatedHtml_NotteSlot_TemperatureIs10()
     {
         var scraper = CreateScraper();
 
-        var result = InvokeParseDayPage(scraper, ProbabilisticHtml, new DateOnly(2026, 3, 20));
+        var result = InvokeParseDayPage(scraper, ComplicatedHtml, new DateOnly(2026, 5, 16));
 
-        Assert.Equal(9, result.HoursDetails[0].TemperatureC);
+        Assert.Equal(10, result.HoursDetails[0].TemperatureC);
     }
 
     [Fact]
-    public void ParseDayPage_WithProbabilisticHtml_PomeriggioSlotHasCorrectTemperature()
+    public void ParseDayPage_WithComplicatedHtml_NotteSlot_PrecipitationIs5point4()
     {
         var scraper = CreateScraper();
 
-        var result = InvokeParseDayPage(scraper, ProbabilisticHtml, new DateOnly(2026, 3, 20));
+        var result = InvokeParseDayPage(scraper, ComplicatedHtml, new DateOnly(2026, 5, 16));
 
-        Assert.Equal(15, result.HoursDetails[2].TemperatureC);
+        Assert.Equal(5.4, result.HoursDetails[0].PrecipitationMm);
     }
 
     [Fact]
-    public void ParseDayPage_WithProbabilisticHtml_NotteSlotHasCorrectWind()
+    public void ParseDayPage_WithComplicatedHtml_NotteSlot_WindIs8KmhNNO()
     {
         var scraper = CreateScraper();
 
-        var result = InvokeParseDayPage(scraper, ProbabilisticHtml, new DateOnly(2026, 3, 20));
+        var result = InvokeParseDayPage(scraper, ComplicatedHtml, new DateOnly(2026, 5, 16));
 
-        Assert.Equal(7, result.HoursDetails[0].WindKmh);
-        Assert.Equal("NNE", result.HoursDetails[0].WindDirection);
+        Assert.Equal(8, result.HoursDetails[0].WindKmh);
+        Assert.Equal("NNO", result.HoursDetails[0].WindDirection);
     }
 
     [Fact]
-    public void ParseDayPage_WithProbabilisticHtml_NotteSlotHasCorrectHumidity()
+    public void ParseDayPage_WithComplicatedHtml_NotteSlot_HumidityIs93()
     {
         var scraper = CreateScraper();
 
-        var result = InvokeParseDayPage(scraper, ProbabilisticHtml, new DateOnly(2026, 3, 20));
+        var result = InvokeParseDayPage(scraper, ComplicatedHtml, new DateOnly(2026, 5, 16));
 
-        Assert.Equal(95, result.HoursDetails[0].HumidityPerc);
+        Assert.Equal(93, result.HoursDetails[0].HumidityPerc);
     }
 
     [Fact]
-    public void ParseDayPage_WithProbabilisticHtml_NotteSlotHasCorrectPressure()
+    public void ParseDayPage_WithComplicatedHtml_NotteSlot_PressureIs1001()
     {
         var scraper = CreateScraper();
 
-        var result = InvokeParseDayPage(scraper, ProbabilisticHtml, new DateOnly(2026, 3, 20));
+        var result = InvokeParseDayPage(scraper, ComplicatedHtml, new DateOnly(2026, 5, 16));
 
-        Assert.Equal(1024, result.HoursDetails[0].PressionMbar);
+        Assert.Equal(1001, result.HoursDetails[0].PressionMbar);
     }
 
     [Fact]
-    public void ParseDayPage_WithProbabilisticHtml_DescriptionIsNotEmpty()
+    public void ParseDayPage_WithComplicatedHtml_DescriptionIsNotEmpty()
     {
         var scraper = CreateScraper();
 
-        var result = InvokeParseDayPage(scraper, ProbabilisticHtml, new DateOnly(2026, 3, 20));
+        var result = InvokeParseDayPage(scraper, ComplicatedHtml, new DateOnly(2026, 5, 16));
 
         Assert.All(result.HoursDetails, h => Assert.NotEmpty(h.WeatherTypeDescription));
     }
 
     [Fact]
-    public void ParseDayPage_WithProbabilisticHtml_WeatherTypeIsMapped()
+    public void ParseDayPage_WithComplicatedHtml_WeatherTypeIsMapped()
     {
         var scraper = CreateScraper();
 
-        var result = InvokeParseDayPage(scraper, ProbabilisticHtml, new DateOnly(2026, 3, 20));
+        var result = InvokeParseDayPage(scraper, ComplicatedHtml, new DateOnly(2026, 5, 16));
 
         Assert.All(result.HoursDetails, h => Assert.NotEqual(WeatherType.Unknown, h.WeatherType));
     }
@@ -399,38 +325,139 @@ public class Meteo3bScraperTests
     // -------------------------------------------------------------------------
 
     [Fact]
-    public void ParseDayPage_WithProbabilisticHtmlMissingEsaContainer_ReturnsEmpty()
+    public void ParseDayPage_WithComplicatedHtmlFewerThanFourSlots_ReturnsEmpty()
     {
         var scraper = CreateScraper();
-        // Has the probabilistic marker but no table-previsioni-esa container
         var html = """
             <html><body>
-              <div id="complicata-right-container"><span>La previsione è complicata.</span></div>
+              <input type="radio" id="tab-orario" disabled>
+              <input type="radio" id="tab-esaorario" checked>
+              <div id="content-esaorario" class="content-panel active">
+                <ul class="fc-accordion-list">
+                  <li class="fc-accordion-item" id="esa-0"></li>
+                  <li class="fc-accordion-item" id="esa-1"></li>
+                </ul>
+              </div>
             </body></html>
             """;
 
-        var result = InvokeParseDayPage(scraper, html, new DateOnly(2026, 3, 20));
+        var result = InvokeParseDayPage(scraper, html, new DateOnly(2026, 5, 16));
 
         Assert.Empty(result.HoursDetails);
     }
 
     [Fact]
-    public void ParseDayPage_WithProbabilisticHtmlFewerThanFourSlots_ReturnsEmpty()
+    public void ParseDayPage_WithMissingContentOrario_ReturnsEmpty()
     {
         var scraper = CreateScraper();
-        // Has the probabilistic marker and the container but only 2 slots
-        var html = """
-            <html><body>
-              <div id="complicata-right-container"><span>La previsione è complicata.</span></div>
-              <div class="table-previsioni-esa">
-                <div class="row-table-xs col-sm-1-5 vtop"><!-- slot 1 --></div>
-                <div class="row-table-xs col-sm-1-5 vtop"><!-- slot 2 --></div>
-              </div>
-            </body></html>
-            """;
+        var html = "<html><body><input type=\"radio\" id=\"tab-orario\" checked></body></html>";
 
-        var result = InvokeParseDayPage(scraper, html, new DateOnly(2026, 3, 20));
+        var result = InvokeParseDayPage(scraper, html, new DateOnly(2026, 5, 14));
 
         Assert.Empty(result.HoursDetails);
     }
+
+    // -------------------------------------------------------------------------
+    // MapWeatherType — singular/plural forms
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public void ParseDayPage_DescriptionWithNubiSparseConPossibiliPiogge_MapsToLightRain()
+    {
+        var scraper = CreateScraper();
+        var html = BuildMinimalHourlyHtml("10", "Nubi sparse con possibili piogge");
+
+        var result = InvokeParseDayPage(scraper, html, new DateOnly(2026, 5, 14));
+
+        Assert.Equal(WeatherType.LightRain, result.HoursDetails[0].WeatherType);
+    }
+
+    [Fact]
+    public void ParseDayPage_DescriptionWithPossibiliPioggeAlone_MapsToProbablyRainy()
+    {
+        var scraper = CreateScraper();
+        var html = BuildMinimalHourlyHtml("10", "Possibili piogge");
+
+        var result = InvokeParseDayPage(scraper, html, new DateOnly(2026, 5, 14));
+
+        Assert.Equal(WeatherType.ProbablyRainy, result.HoursDetails[0].WeatherType);
+    }
+
+    [Fact]
+    public void ParseDayPage_DescriptionWithSerenoOPocoNuvoloso_MapsToSunny()
+    {
+        var scraper = CreateScraper();
+        var html = BuildMinimalHourlyHtml("10", "Sereno o poco nuvoloso");
+
+        var result = InvokeParseDayPage(scraper, html, new DateOnly(2026, 5, 14));
+
+        Assert.Equal(WeatherType.Sunny, result.HoursDetails[0].WeatherType);
+    }
+
+    [Fact]
+    public void ParseDayPage_DescriptionWithPocoNuvolosoAlone_MapsToPartlyCloudy()
+    {
+        var scraper = CreateScraper();
+        var html = BuildMinimalHourlyHtml("10", "Poco nuvoloso");
+
+        var result = InvokeParseDayPage(scraper, html, new DateOnly(2026, 5, 14));
+
+        Assert.Equal(WeatherType.PartlyCloudy, result.HoursDetails[0].WeatherType);
+    }
+
+    [Fact]
+    public void ParseDayPage_DescriptionWithTemporali_MapsToThunderstorm()
+    {
+        var scraper = CreateScraper();
+        var html = BuildMinimalHourlyHtml("10", "Molto nuvoloso con piogge e temporali");
+
+        var result = InvokeParseDayPage(scraper, html, new DateOnly(2026, 5, 14));
+
+        Assert.Equal(WeatherType.Thunderstorm, result.HoursDetails[0].WeatherType);
+    }
+
+    [Fact]
+    public void ParseDayPage_DescriptionWithTemporale_MapsToThunderstorm()
+    {
+        var scraper = CreateScraper();
+        var html = BuildMinimalHourlyHtml("10", "Temporale");
+
+        var result = InvokeParseDayPage(scraper, html, new DateOnly(2026, 5, 14));
+
+        Assert.Equal(WeatherType.Thunderstorm, result.HoursDetails[0].WeatherType);
+    }
+
+    private static string BuildMinimalHourlyHtml(string hour, string summaryDescription) => $"""
+        <html><body>
+          <input type="radio" id="tab-orario" checked>
+          <div id="content-orario" class="content-panel active">
+            <ul class="fc-accordion-list">
+              <li class="fc-accordion-item" id="{hour}">
+                <button>
+                  <div class="fc-accordion-header">
+                    <div class="to-left">
+                      <span class="ds-body-medium ds-forecast-time">{hour}</span>
+                      <div class="fc-accordion-condition">
+                        <span class="ds-body-medium">desc</span>
+                      </div>
+                    </div>
+                    <div class="to-right">
+                      <span class="ds-heading-medium unit-temp" data-temp-c="15">15°</span>
+                      <span class="ds-body-small unit-wind" data-wind-kmh="5" data-wind-dir="N">5 km/h N</span>
+                    </div>
+                  </div>
+                </button>
+                <div class="dropdown fc-accordion-details">
+                  <div class="fc-accordion-summary-mobile ds-label-medium">{summaryDescription}</div>
+                  <ul class="fc-accordion-grid">
+                    <li data-param="precipitazioni"><span class="ds-body-small">Acc.</span><span class="ds-label-medium">0 mm</span></li>
+                    <li data-param="umidita"><span class="ds-body-small">Umidità</span><span class="ds-label-medium">60%</span></li>
+                    <li data-param="pressione"><span class="ds-body-small">Pressione</span><span class="ds-label-medium">1010 mb</span></li>
+                  </ul>
+                </div>
+              </li>
+            </ul>
+          </div>
+        </body></html>
+        """;
 }

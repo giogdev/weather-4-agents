@@ -16,10 +16,11 @@ jobs:
 
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 8
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
       - name: Restore dependencies
@@ -31,10 +32,11 @@ jobs:
 
   docker:
     runs-on: ubuntu-latest
+    timeout-minutes: 8
     needs: build
     if: github.event_name == 'push'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Extract Docker metadata
         id: meta
@@ -42,11 +44,11 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            # push tag v1.2.3 → genera 1.2.3
+            # push tag v1.2.3 → generates 1.2.3
             type=semver,pattern={{version}}
-            # push su branch → short sha (es. sha-a3f8c2d)
+            # push on branch → short sha (e.g. sha-a3f8c2d)
             type=sha,prefix=sha-,format=short
-            # latest solo sul branch di default (master)
+            # latest only on the default branch (master)
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Set up QEMU
