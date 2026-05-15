@@ -42,7 +42,6 @@ public partial class Meteo3bScraper : BaseWeatherScraper
             try
             {
                 var html = await HttpClient.GetStringAsync(url, ct);
-                
                 var dayWeather = ParseDayPage(html, today.AddDays(dayOffset));
                 if (dayWeather.HoursDetails.Count > 0)
                     results.Add(dayWeather);
@@ -67,259 +66,143 @@ public partial class Meteo3bScraper : BaseWeatherScraper
             Provider = new WeatherProvider(ProviderName)
         };
 
-        // Detect probabilistic page via div#complicata-right-container
-        var isProbabilistic = doc.GetElementbyId("complicata-right-container") is not null;
+        // Complicated pages have the "Oraria" tab disabled — only 6-hour slots are available
+        var isComplicated = IsComplicatedPage(doc);
+        var reliability = isComplicated ? 20 : ParseReliability(doc);
 
-        if (isProbabilistic)
-        {
-            dayWeather.HoursDetails = ParseProbabilisticSlots(doc);
-        }
-        else
-        {
-            var reliability = ParseReliability(doc);
-
-            // Each weather hour row is wrapped in a div.row-table.noPad
-            var rows = doc.DocumentNode.SelectNodes(
-                "//div[contains(@class,'row-table') and contains(@class,'noPad')]");
-            if (rows is not null)
-            {
-                foreach (var row in rows)
-                {
-                    var details = ParseHourRow(row, reliability);
-                    if (details is not null)
-                        dayWeather.HoursDetails.Add(details);
-                }
-
-                dayWeather.HoursDetails = dayWeather.HoursDetails.OrderBy(x => x.TimeFrom).ToList();
-            }
-        }
+        dayWeather.HoursDetails = isComplicated
+            ? ParseEsaSlots(doc, reliability)
+            : ParseHourlyItems(doc, reliability);
 
         return dayWeather;
     }
 
-    private static int ParseReliability(HtmlDocument doc)
+    private static bool IsComplicatedPage(HtmlDocument doc)
     {
-        // Reliability is always inside a <small> within div.perc,
-        // e.g. "90-95% - Molto alta" or "<50% - Molto bassa".
-        // Using XPath with the accented char 'à' is unreliable in HtmlAgilityPack,
-        // so we target the container class directly.
-        var percSmall = doc.DocumentNode.SelectSingleNode("//div[contains(@class,'perc')]//small");
-        if (percSmall is null)
-            return 100;
-
-        var text = HtmlEntity.DeEntitize(percSmall.InnerText).Trim();
-
-        var rangeMatch = ReliabilityRangeRegex().Match(text);
-        if (rangeMatch.Success)
-        {
-            var lo = int.Parse(rangeMatch.Groups[1].Value, CultureInfo.InvariantCulture);
-            var hi = int.Parse(rangeMatch.Groups[2].Value, CultureInfo.InvariantCulture);
-            return (lo + hi) / 2;
-        }
-
-        var singleMatch = ReliabilitySingleRegex().Match(text);
-        if (singleMatch.Success)
-            return int.Parse(singleMatch.Groups[1].Value, CultureInfo.InvariantCulture);
-
-        return 100;
+        var tabOrario = doc.GetElementbyId("tab-orario");
+        return tabOrario is not null && tabOrario.Attributes["disabled"] is not null;
     }
 
-    private static List<HoursWeatherDetails> ParseProbabilisticSlots(HtmlDocument doc)
+    private static int ParseReliability(HtmlDocument doc)
     {
-        const int reliability = 20; // probabilistic pages default reliability
+        // Reliability is shown as "NN%" in a span inside the fc-accordion-footer card
+        var span = doc.DocumentNode.SelectSingleNode(
+            "//div[contains(@class,'fc-accordion-footer')]//span[contains(@class,'ds-label-medium')]");
+        if (span is null)
+            return 100;
 
-        var esaContainer = doc.DocumentNode.SelectSingleNode(
-            "//div[contains(@class,'table-previsioni-esa')]");
-        if (esaContainer is null)
+        var match = ReliabilitySingleRegex().Match(HtmlEntity.DeEntitize(span.InnerText).Trim());
+        return match.Success
+            ? int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture)
+            : 100;
+    }
+
+    private static List<HoursWeatherDetails> ParseHourlyItems(HtmlDocument doc, int reliability)
+    {
+        var items = doc.DocumentNode.SelectNodes(
+            "//div[@id='content-orario']//li[contains(@class,'fc-accordion-item')]");
+        if (items is null)
             return [];
 
-        var slots = esaContainer.SelectNodes(
-            ".//div[contains(@class,'row-table-xs') and contains(@class,'col-sm-1-5')]");
-        if (slots is null || slots.Count < 4)
-            return [];
+        var results = new List<HoursWeatherDetails>();
+        foreach (var item in items)
+        {
+            var timeNode = item.SelectSingleNode(".//span[contains(@class,'ds-forecast-time')]");
+            var timeText = HtmlEntity.DeEntitize(timeNode?.InnerText ?? string.Empty).Trim();
+            if (!int.TryParse(timeText, out var hour) || hour is < 0 or > 23)
+                continue;
 
-        (TimeOnly From, TimeOnly To)[] slotDefs =
-        [
-            (new TimeOnly(0,  0), new TimeOnly(6,  0)),
-            (new TimeOnly(6,  0), new TimeOnly(12, 0)),
-            (new TimeOnly(12, 0), new TimeOnly(18, 0)),
-            (new TimeOnly(18, 0), new TimeOnly(0,  0)),
-        ];
+            var details = ParseAccordionItem(item, new TimeOnly(hour, 0), new TimeOnly(hour, 0).AddHours(1), reliability);
+            if (details is not null)
+                results.Add(details);
+        }
+
+        return [.. results.OrderBy(x => x.TimeFrom)];
+    }
+
+    private static readonly (TimeOnly From, TimeOnly To)[] EsaSlotDefs =
+    [
+        (new TimeOnly(0,  0), new TimeOnly(6,  0)),   // Not. - Notte
+        (new TimeOnly(6,  0), new TimeOnly(12, 0)),   // Mat. - Mattino
+        (new TimeOnly(12, 0), new TimeOnly(18, 0)),   // Pom. - Pomeriggio
+        (new TimeOnly(18, 0), new TimeOnly(0,  0)),   // Ser. - Sera
+    ];
+
+    private static List<HoursWeatherDetails> ParseEsaSlots(HtmlDocument doc, int reliability)
+    {
+        var items = doc.DocumentNode.SelectNodes(
+            "//div[@id='content-esaorario']//li[contains(@class,'fc-accordion-item')]");
+        if (items is null || items.Count < 4)
+            return [];
 
         var results = new List<HoursWeatherDetails>();
         for (var i = 0; i < 4; i++)
         {
-            var slot = slots[i];
-            var (timeFrom, timeTo) = slotDefs[i];
-
-            // Description: <small class="hidden-xs"> = full desktop text; fallback: hidden-sm
-            // img alt is empty on probabilistic pages
-            var descNode = slot.SelectSingleNode(".//small[contains(@class,'hidden-xs')]")
-                        ?? slot.SelectSingleNode(".//small[contains(@class,'hidden-sm')]");
-            var description = HtmlEntity.DeEntitize(descNode?.InnerText ?? string.Empty).Trim();
-
-            var tempSpan = slot.SelectSingleNode(".//p[contains(@class,'switchcelsius')]");
-            var tempC = ParseFirstDouble(tempSpan?.InnerText ?? string.Empty);
-
-            var precipDiv = slot.SelectSingleNode(".//div[contains(@class,'altriDati-pioggia')]");
-            var precipText = ExtractLabeledValue(precipDiv, "prec");
-            var precipPerc = ParsePrecipitation(precipText);
-
-            var windSpeedSpan = precipDiv?.SelectSingleNode(".//span[contains(@class,'switchkm')]");
-            var windKmh = ParseFirstDouble(windSpeedSpan?.InnerText ?? string.Empty);
-
-            // Wind direction is a text node inside the <p> containing "venti",
-            // not a direct child of precipDiv — so we pass that <p> to ExtractWindDirection.
-            var ventiP = precipDiv?.SelectNodes(".//p")
-                ?.FirstOrDefault(p => HtmlEntity.DeEntitize(p.InnerText)
-                    .Contains("venti", StringComparison.OrdinalIgnoreCase));
-            var windDirection = ExtractWindDirection(ventiP);
-
-            var humidityText = ExtractLabeledValue(precipDiv, "umid").Replace("%", "").Trim();
-            int.TryParse(humidityText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var humidity);
-
-            var altroDiv = slot.SelectSingleNode(".//div[contains(@class,'altriDati-altro')]");
-            var pressureText = ExtractLabeledValue(altroDiv, "press");
-            var pressureMbar = (int)ParseFirstDouble(pressureText);
-
-            results.Add(new HoursWeatherDetails
-            {
-                TimeFrom               = timeFrom,
-                TimeTo                 = timeTo,
-                WeatherType            = MapWeatherType(description),
-                WeatherTypeDescription = description,
-                TemperatureC           = tempC,
-                PrecipitationMm        = precipPerc,
-                HumidityPerc           = humidity,
-                PressionMbar           = pressureMbar,
-                WindKmh                = windKmh,
-                WindDirection          = windDirection,
-                ReliabilityPerc        = reliability,
-            });
+            var (timeFrom, timeTo) = EsaSlotDefs[i];
+            var details = ParseAccordionItem(items[i], timeFrom, timeTo, reliability);
+            if (details is not null)
+                results.Add(details);
         }
         return results;
     }
 
-    private static string ExtractLabeledValue(HtmlNode? div, string labelFragment)
+    private static HoursWeatherDetails? ParseAccordionItem(HtmlNode item, TimeOnly timeFrom, TimeOnly timeTo, int reliability)
     {
-        if (div is null) return string.Empty;
-        foreach (var p in div.SelectNodes(".//p") ?? Enumerable.Empty<HtmlNode>())
-        {
-            var text = HtmlEntity.DeEntitize(p.InnerText);
-            if (text.Contains(labelFragment, StringComparison.OrdinalIgnoreCase))
-            {
-                var labelSpan = p.SelectSingleNode(".//span[@class='small']");
-                var label = HtmlEntity.DeEntitize(labelSpan?.InnerText ?? string.Empty);
-                return text.Replace(label, string.Empty).Trim();
-            }
-        }
-        return string.Empty;
-    }
+        // Prefer the detailed summary text; fall back to the short header label
+        var descNode = item.SelectSingleNode(".//div[contains(@class,'fc-accordion-summary-mobile')]")
+                    ?? item.SelectSingleNode(".//div[contains(@class,'fc-accordion-condition')]//span[contains(@class,'ds-body-medium')]");
+        var description = HtmlEntity.DeEntitize(descNode?.InnerText ?? string.Empty).Trim();
 
-    private static HoursWeatherDetails? ParseHourRow(HtmlNode outerRow, int reliability)
-    {
-        // Left panel: time + icon + description live inside div.row-table.special_campaign
-        var specialCampaign = outerRow.SelectSingleNode(
-            ".//div[contains(@class,'row-table')]");
-        if (specialCampaign is null)
-            return null;
+        // Temperature: data-temp-c attribute on span.unit-temp
+        var tempSpan = item.SelectSingleNode(".//span[contains(@class,'unit-temp')]");
+        double.TryParse(
+            tempSpan?.GetAttributeValue("data-temp-c", "0").Trim(),
+            NumberStyles.Any, CultureInfo.InvariantCulture, out var tempC);
 
-        // Hour number is in the first "big zoom_prv" div (e.g. "14<span>:00</span>")
-        var hourDiv = specialCampaign.SelectSingleNode(
-            ".//div[contains(@class,'big')]");
-        if (hourDiv is null)
-            return null;
+        // Wind: data-wind-kmh and data-wind-dir attributes on span.unit-wind
+        var windSpan = item.SelectSingleNode(".//span[contains(@class,'unit-wind')]");
+        double.TryParse(
+            windSpan?.GetAttributeValue("data-wind-kmh", "0").Trim(),
+            NumberStyles.Any, CultureInfo.InvariantCulture, out var windKmh);
+        var windDir = windSpan?.GetAttributeValue("data-wind-dir", string.Empty).Trim() ?? string.Empty;
 
-        var hourMatch = NumberRegex().Match(HtmlEntity.DeEntitize(hourDiv.InnerText));
-        if (!hourMatch.Success || !int.TryParse(hourMatch.Value, out var hour) || hour is < 0 or > 23)
-            return null;
+        var precipMm = ParsePrecipitation(GetParamValue(item, "precipitazioni"));
 
-        var timeFrom = new TimeOnly(hour, 0);
-
-        // Description: prefer img alt, fallback to text in col-xs-2-4 div
-        var img = specialCampaign.SelectSingleNode(".//img");
-        var description = img?.GetAttributeValue("alt", string.Empty).Trim() ?? string.Empty;
-        if (string.IsNullOrWhiteSpace(description))
-        {
-            var descDiv = specialCampaign.SelectSingleNode(".//div[contains(@class,'col-xs-2-4')]");
-            description = HtmlEntity.DeEntitize(descDiv?.InnerText ?? string.Empty).Trim();
-        }
-
-        // Right panel: temperature, precipitation, wind, humidity, pressure (div.col-sm-3-5)
-        var rightPanel = outerRow.SelectSingleNode(".//div[contains(@class,'col-sm-3-5')]");
-        if (rightPanel is null)
-            return null;
-
-        // Temperature (Celsius): in the "big" div, first span.switchcelsius
-        var tempSpan = rightPanel.SelectSingleNode(
-            ".//div[contains(@class,'big')]//span[contains(@class,'switchcelsius')]");
-        var tempC = ParseFirstDouble(tempSpan?.InnerText ?? string.Empty);
-
-        // Precipitation: "assenti" hours use a span.gray child; rainy hours store the mm value
-        // as direct text in the div (e.g. "1.1 mm"). We prefer span.gray when present,
-        // otherwise fall back to the div's own direct text nodes.
-        var precipDiv = rightPanel.SelectSingleNode(".//div[contains(@class,'altriDati-precipitazioni')]");
-        var precipSpan = precipDiv?.SelectSingleNode(".//span[contains(@class,'gray')]");
-        string precipText;
-        if (precipSpan is not null)
-        {
-            precipText = HtmlEntity.DeEntitize(precipSpan.InnerText).Trim();
-        }
-        else
-        {
-            // Extract only direct text nodes from the div (skip child element text like img alt)
-            precipText = string.Concat(
-                precipDiv?.ChildNodes
-                    .Where(n => n.NodeType == HtmlNodeType.Text)
-                    .Select(n => HtmlEntity.DeEntitize(n.InnerText))
-                ?? []).Trim();
-        }
-        var precipPerc = ParsePrecipitation(precipText);
-
-        // Wind speed (km/h): span.switchkm inside altriDati-venti
-        var windSpeedSpan = rightPanel.SelectSingleNode(
-            ".//div[contains(@class,'altriDati-venti')]//span[contains(@class,'switchkm')]");
-        var windKmh = ParseFirstDouble(windSpeedSpan?.InnerText ?? string.Empty);
-
-        // Wind direction: direct text node after the spans in altriDati-venti
-        var ventiDiv = rightPanel.SelectSingleNode(".//div[contains(@class,'altriDati-venti')]");
-        var windDirection = ExtractWindDirection(ventiDiv);
-
-        // Humidity: altriDati-umidita
-        var humidityDiv = rightPanel.SelectSingleNode(".//div[contains(@class,'altriDati-umidita')]");
-        var humidityText = HtmlEntity.DeEntitize(humidityDiv?.InnerText ?? string.Empty).Replace("%", "").Trim();
+        var humidityText = GetParamValue(item, "umidita").Replace("%", "").Trim();
         int.TryParse(humidityText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var humidity);
 
-        // Pressure (mbar): altriDati-pressione
-        var pressureDiv = rightPanel.SelectSingleNode(".//div[contains(@class,'altriDati-pressione')]");
-        var pressureMbar = (int)ParseFirstDouble(pressureDiv?.InnerText ?? string.Empty);
+        var pressureMbar = (int)ParseFirstDouble(GetParamValue(item, "pressione"));
 
         return new HoursWeatherDetails
         {
-            TimeFrom = timeFrom,
-            TimeTo = timeFrom.AddHours(1),
-            WeatherType = MapWeatherType(description),
+            TimeFrom               = timeFrom,
+            TimeTo                 = timeTo,
+            WeatherType            = MapWeatherType(description),
             WeatherTypeDescription = description,
-            TemperatureC = tempC,
-            PrecipitationMm = precipPerc,
-            HumidityPerc = humidity,
-            PressionMbar = pressureMbar,
-            WindKmh = windKmh,
-            WindDirection = windDirection,
-            ReliabilityPerc = reliability,
+            TemperatureC           = tempC,
+            PrecipitationMm        = precipMm,
+            HumidityPerc           = humidity,
+            PressionMbar           = pressureMbar,
+            WindKmh                = windKmh,
+            WindDirection          = windDir,
+            ReliabilityPerc        = reliability,
         };
     }
 
-    private static string ExtractWindDirection(HtmlNode? ventiDiv)
+    private static string GetParamValue(HtmlNode item, string paramName)
     {
-        if (ventiDiv is null)
-            return string.Empty;
+        var grid = item.SelectSingleNode(".//ul[contains(@class,'fc-accordion-grid')]");
+        if (grid is null) return string.Empty;
 
-        // Wind direction is a direct text node in the div, appearing after the speed/knots spans
-        return ventiDiv.ChildNodes
-            .Where(n => n.NodeType == HtmlNodeType.Text)
-            .Select(n => HtmlEntity.DeEntitize(n.InnerText).Trim())
-            .LastOrDefault(t => !string.IsNullOrWhiteSpace(t)) ?? string.Empty;
+        foreach (var li in grid.SelectNodes("li") ?? Enumerable.Empty<HtmlNode>())
+        {
+            if (li.GetAttributeValue("data-param", string.Empty) == paramName)
+            {
+                var valueSpan = li.SelectSingleNode(".//span[contains(@class,'ds-label-medium')]");
+                return HtmlEntity.DeEntitize(valueSpan?.InnerText ?? string.Empty).Trim();
+            }
+        }
+        return string.Empty;
     }
 
     private static double ParsePrecipitation(string text)
@@ -329,10 +212,9 @@ public partial class Meteo3bScraper : BaseWeatherScraper
             return 0d;
 
         var match = NumberRegex().Match(text);
-        if (!match.Success)
-            return 0d;
-
-        return double.Parse(match.Value, CultureInfo.InvariantCulture);
+        return match.Success
+            ? double.Parse(match.Value, CultureInfo.InvariantCulture)
+            : 0d;
     }
 
     private static double ParseFirstDouble(string text)
@@ -343,28 +225,38 @@ public partial class Meteo3bScraper : BaseWeatherScraper
             : 0d;
     }
 
+    // Order matters: more specific conditions must appear before generic ones.
+    // LightRain must precede PartlyCloudy because "nubi sparse con possibili piogge"
+    // contains "nubi sparse" which would otherwise match PartlyCloudy first.
+    private static readonly (Func<string, bool> Matches, string WeatherType)[] WeatherMappings =
+    [
+        (d => d.Contains("temporal"),                                                                                                    WeatherType.Thunderstorm),
+        (d => d.Contains("grandine"),                                                                                                    WeatherType.Hail),
+        (d => d.Contains("neve abbondante") || d.Contains("bufera"),                                                                    WeatherType.HeavySnow),
+        (d => d.Contains("nevischio") || d.Contains("pioggia mista a neve"),                                                           WeatherType.Sleet),
+        (d => d.Contains("neve"),                                                                                                        WeatherType.Snowy),
+        (d => d.Contains("pioggia forte") || d.Contains("acquazzone") || d.Contains("rovescio forte"),                                 WeatherType.HeavyRain),
+        (d => d.Contains("pioggia") || d.Contains("rovescio") || d.Contains("rovesci") || d.Contains("pioggere"),                     WeatherType.Rainy),
+        (d => d.Contains("nebbia") || d.Contains("foschia"),                                                                           WeatherType.Foggy),
+        (d => d.Contains("coperto"),                                                                                                     WeatherType.Overcast),
+        (d => d.Contains("possibili piogge") && (d.Contains("nubi sparse") || d.Contains("poco nuvoloso") || d.Contains("parz")),     WeatherType.LightRain),
+        (d => d.Contains("possibili piogge"),                                                                                           WeatherType.ProbablyRainy),
+        (d => d.Contains("sereno") && (d.Contains("poco nuvoloso") || d.Contains("parz")),                                            WeatherType.Sunny),
+        (d => d.Contains("parz") || d.Contains("poco nuvoloso") || d.Contains("variabile") || d.Contains("nubi sparse"),              WeatherType.PartlyCloudy),
+        (d => d.Contains("nuvoloso"),                                                                                                    WeatherType.Cloudy),
+        (d => d.Contains("sereno") || d.Contains("soleggiato"),                                                                        WeatherType.Sunny),
+        (d => d.Contains("vento forte"),                                                                                                 WeatherType.HeavyWindy),
+        (d => d.Contains("velature"),                                                                                                    WeatherType.LightClouds),
+    ];
+
     private static string MapWeatherType(string description)
     {
         var d = description.ToLowerInvariant();
-
-        // Order matters: more specific conditions before generic ones
-        if (d.Contains("temporale")) return WeatherType.Thunderstorm;
-        if (d.Contains("grandine")) return WeatherType.Hail;
-        if (d.Contains("neve abbondante") || d.Contains("bufera")) return WeatherType.HeavySnow;
-        if (d.Contains("nevischio") || d.Contains("pioggia mista a neve")) return WeatherType.Sleet;
-        if (d.Contains("neve")) return WeatherType.Snowy;
-        if (d.Contains("pioggia forte") || d.Contains("acquazzone") || d.Contains("rovescio forte")) return WeatherType.HeavyRain;
-        if (d.Contains("pioggia") || d.Contains("rovescio") || d.Contains("pioggere")) return WeatherType.Rainy;
-        if (d.Contains("nebbia") || d.Contains("foschia")) return WeatherType.Foggy;
-        if (d.Contains("coperto")) return WeatherType.Overcast;
-        if (d.Contains("parz") || d.Contains("parz nuvoloso") || d.Contains("poco nuvoloso") || d.Contains("variabile") || d.Contains("nubi sparse")) return WeatherType.PartlyCloudy;
-        if (d.Contains("nuvoloso")) return WeatherType.Cloudy;
-        if (d.Contains("sereno") || d.Contains("soleggiato")) return WeatherType.Sunny;
-        if (d.Contains("vento forte")) return WeatherType.HeavyWindy;
-        if (d.Contains("possibili piogge")) return WeatherType.ProbablyRainy;
-        if (d.Contains("velature sparse")) return WeatherType.LightClouds;
-        //
-
+        foreach (var (matches, weatherType) in WeatherMappings)
+        {
+            if (matches(d))
+                return weatherType;
+        }
         return WeatherType.Unknown;
     }
 
@@ -372,11 +264,7 @@ public partial class Meteo3bScraper : BaseWeatherScraper
     [GeneratedRegex(@"\d+(?:[.,]\d+)?")]
     private static partial Regex NumberRegex();
 
-    // Matches "X-Y%" reliability ranges (e.g. "90-95%")
-    [GeneratedRegex(@"(\d+)-(\d+)%")]
-    private static partial Regex ReliabilityRangeRegex();
-
-    // Matches a single "X%" reliability value (e.g. "70%")
+    // Matches a single "X%" reliability value (e.g. "90%")
     [GeneratedRegex(@"(\d+)%")]
     private static partial Regex ReliabilitySingleRegex();
 }

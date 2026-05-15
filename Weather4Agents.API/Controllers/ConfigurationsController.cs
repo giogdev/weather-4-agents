@@ -3,6 +3,9 @@ using Weather4Agents.Application.Interfaces.Scrapers;
 
 namespace Weather4Agents.API.Controllers;
 
+/// <summary>
+/// Service configurations
+/// </summary>
 [ApiController]
 [Route("api/configurations")]
 public class ConfigurationsController : ControllerBase
@@ -16,6 +19,7 @@ public class ConfigurationsController : ControllerBase
 
     /// <summary>Returns the list of available weather provider names.</summary>
     [HttpGet("providers")]
+    [ProducesResponseType<IEnumerable<string>>(StatusCodes.Status200OK)]
     public IActionResult GetProviders()
     {
         var providers = _resolver.GetAvailableProviders();
