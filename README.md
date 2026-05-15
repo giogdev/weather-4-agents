@@ -48,7 +48,9 @@ Yu can consume APIs to get weather data
 
 ![alt text](./docs/images/n8n-integration.png)
 
-# Changelog
+# Changelo
+## v1.0.4
+- Updated 3bmeteo web scraper (3bmeteo website was refactored)
 ## v1.0.3
 - OpenApi definitions in `<endpoint>/openapi/v1.json`
 - Refactoring of api endpoints definitions
