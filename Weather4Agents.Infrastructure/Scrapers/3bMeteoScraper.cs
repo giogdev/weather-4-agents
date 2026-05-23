@@ -66,26 +66,44 @@ public partial class Meteo3bScraper : BaseWeatherScraper
             Provider = new WeatherProvider(ProviderName)
         };
 
-        // Complicated pages have the "Oraria" tab disabled — only 6-hour slots are available
-        var isComplicated = IsComplicatedPage(doc);
-        var reliability = isComplicated ? 20 : ParseReliability(doc);
-
-        dayWeather.HoursDetails = isComplicated
-            ? ParseEsaSlots(doc, reliability)
-            : ParseHourlyItems(doc, reliability);
+        if (doc.GetElementbyId("table_orario_ita") is not null)
+        {
+            // Table layout (complete1/2/today-style): flat row-table rows
+            var reliability = ParseTableReliability(doc);
+            dayWeather.HoursDetails = ParseTableHourlyItems(doc, reliability);
+        }
+        else
+        {
+            // Accordion layout (complete4-style and legacy): fc-accordion-item elements
+            var isComplicated = IsComplicatedPage(doc);
+            var reliability = isComplicated ? 20 : ParseReliability(doc);
+            dayWeather.HoursDetails = isComplicated
+                ? ParseEsaSlots(doc, reliability)
+                : ParseHourlyItems(doc, reliability);
+        }
 
         return dayWeather;
     }
 
+    // ── Accordion layout ────────────────────────────────────────────────────
+
     private static bool IsComplicatedPage(HtmlDocument doc)
     {
         var tabOrario = doc.GetElementbyId("tab-orario");
-        return tabOrario is not null && tabOrario.Attributes["disabled"] is not null;
+        if (tabOrario is null) return false;
+
+        // Legacy design: tab had a disabled HTML attribute
+        if (tabOrario.Attributes["disabled"] is not null) return true;
+
+        // New design (radio-button): check whether hourly items are actually present
+        var items = doc.DocumentNode.SelectNodes(
+            "//div[@id='content-orario']//li[contains(@class,'fc-accordion-item')]");
+        return items is null || items.Count == 0;
     }
 
     private static int ParseReliability(HtmlDocument doc)
     {
-        // Reliability is shown as "NN%" in a span inside the fc-accordion-footer card
+        // Reliability shown as "NN%" in a span inside the fc-accordion-footer card
         var span = doc.DocumentNode.SelectSingleNode(
             "//div[contains(@class,'fc-accordion-footer')]//span[contains(@class,'ds-label-medium')]");
         if (span is null)
@@ -107,7 +125,8 @@ public partial class Meteo3bScraper : BaseWeatherScraper
         var results = new List<HoursWeatherDetails>();
         foreach (var item in items)
         {
-            var timeNode = item.SelectSingleNode(".//span[contains(@class,'ds-forecast-time')]");
+            // Time element is a <div> in the new design and a <span> in the legacy one
+            var timeNode = item.SelectSingleNode(".//*[contains(@class,'ds-forecast-time')]");
             var timeText = HtmlEntity.DeEntitize(timeNode?.InnerText ?? string.Empty).Trim();
             if (!int.TryParse(timeText, out var hour) || hour is < 0 or > 23)
                 continue;
@@ -148,12 +167,13 @@ public partial class Meteo3bScraper : BaseWeatherScraper
 
     private static HoursWeatherDetails? ParseAccordionItem(HtmlNode item, TimeOnly timeFrom, TimeOnly timeTo, int reliability)
     {
-        // Prefer the detailed summary text; fall back to the short header label
+        // Prefer the detailed summary text; fall back to the short header label (new design) or condition span (legacy)
         var descNode = item.SelectSingleNode(".//div[contains(@class,'fc-accordion-summary-mobile')]")
+                    ?? item.SelectSingleNode(".//span[contains(@class,'unit-tempo')]")
                     ?? item.SelectSingleNode(".//div[contains(@class,'fc-accordion-condition')]//span[contains(@class,'ds-body-medium')]");
         var description = HtmlEntity.DeEntitize(descNode?.InnerText ?? string.Empty).Trim();
 
-        // Temperature: data-temp-c attribute on span.unit-temp
+        // Temperature: data-temp-c attribute on span.unit-temp (class name varies across designs)
         var tempSpan = item.SelectSingleNode(".//span[contains(@class,'unit-temp')]");
         double.TryParse(
             tempSpan?.GetAttributeValue("data-temp-c", "0").Trim(),
@@ -204,6 +224,103 @@ public partial class Meteo3bScraper : BaseWeatherScraper
         }
         return string.Empty;
     }
+
+    // ── Table layout ─────────────────────────────────────────────────────────
+
+    private static int ParseTableReliability(HtmlDocument doc)
+    {
+        // Reliability bar carries the percentage as a CSS width value, e.g. style="width:90%"
+        var bar = doc.DocumentNode.SelectSingleNode("//div[contains(@class,'perc-progress-bar')]");
+        if (bar is null) return 100;
+
+        var style = bar.GetAttributeValue("style", string.Empty);
+        var match = ReliabilitySingleRegex().Match(style);
+        return match.Success
+            ? int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture)
+            : 100;
+    }
+
+    private static List<HoursWeatherDetails> ParseTableHourlyItems(HtmlDocument doc, int reliability)
+    {
+        var rows = doc.DocumentNode.SelectNodes(
+            "//div[@id='table_orario_ita']//div[contains(@class,'row-table') and contains(@class,'noPad')]");
+        if (rows is null)
+            return [];
+
+        var results = new List<HoursWeatherDetails>();
+        foreach (var row in rows)
+        {
+            // Time cell: col-xs-1-4 big — inner text is "00:00" (possibly with alert link text appended)
+            var timeDiv = row.SelectSingleNode(".//div[contains(@class,'col-xs-1-4') and contains(@class,'big')]");
+            var timeText = HtmlEntity.DeEntitize(timeDiv?.InnerText ?? string.Empty).Trim();
+            var timeMatch = HourStartRegex().Match(timeText);
+            if (!timeMatch.Success) continue;
+            if (!int.TryParse(timeMatch.Groups[1].Value, out var hour) || hour is < 0 or > 23) continue;
+
+            var timeFrom = new TimeOnly(hour, 0);
+            var timeTo   = timeFrom.AddHours(1);
+
+            // Weather description: col-xs-2-4 holds plain text like "nubi sparse"
+            var descDiv    = row.SelectSingleNode(".//div[contains(@class,'col-xs-2-4')]");
+            var description = HtmlEntity.DeEntitize(descDiv?.InnerText ?? string.Empty).Trim();
+
+            // Temperature: switchcelsius active span, inner text like "10.7°"
+            var tempSpan = row.SelectSingleNode(
+                ".//span[contains(@class,'switchcelsius') and contains(@class,'active')]");
+            var tempText = HtmlEntity.DeEntitize(tempSpan?.InnerText ?? "0").Trim().TrimEnd('°', ' ');
+            double.TryParse(tempText, NumberStyles.Any, CultureInfo.InvariantCulture, out var tempC);
+
+            // Precipitation
+            var precDiv   = row.SelectSingleNode(".//div[contains(@class,'altriDati-precipitazioni')]");
+            var precipMm  = ParsePrecipitation(HtmlEntity.DeEntitize(precDiv?.InnerText ?? string.Empty).Trim());
+
+            // Wind: speed from switchkm active span, direction from remaining text
+            var ventoDiv  = row.SelectSingleNode(".//div[contains(@class,'altriDati-venti')]");
+            var kmSpan    = ventoDiv?.SelectSingleNode(
+                ".//span[contains(@class,'switchkm') and contains(@class,'active')]");
+            double.TryParse(
+                HtmlEntity.DeEntitize(kmSpan?.InnerText ?? "0").Trim(),
+                NumberStyles.Any, CultureInfo.InvariantCulture, out var windKmh);
+            var ventoText = HtmlEntity.DeEntitize(ventoDiv?.InnerText ?? string.Empty).Trim();
+            var windDir   = ExtractWindDirection(ventoText);
+
+            // Humidity: "75%" → strip % and parse
+            var humDiv    = row.SelectSingleNode(".//div[contains(@class,'altriDati-umidita')]");
+            var humText   = HtmlEntity.DeEntitize(humDiv?.InnerText ?? string.Empty).Replace("%", "").Trim();
+            int.TryParse(humText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var humidity);
+
+            // Pressure: plain numeric text like "1024.4"
+            var presDiv      = row.SelectSingleNode(".//div[contains(@class,'altriDati-pressione')]");
+            var pressureMbar = (int)ParseFirstDouble(HtmlEntity.DeEntitize(presDiv?.InnerText ?? string.Empty));
+
+            results.Add(new HoursWeatherDetails
+            {
+                TimeFrom               = timeFrom,
+                TimeTo                 = timeTo,
+                WeatherType            = MapWeatherType(description),
+                WeatherTypeDescription = description,
+                TemperatureC           = tempC,
+                PrecipitationMm        = precipMm,
+                HumidityPerc           = humidity,
+                PressionMbar           = pressureMbar,
+                WindKmh                = windKmh,
+                WindDirection          = windDir,
+                ReliabilityPerc        = reliability,
+            });
+        }
+
+        return [.. results.OrderBy(x => x.TimeFrom)];
+    }
+
+    // Extracts the compass direction from a wind cell text like "6  4  NNE"
+    private static string ExtractWindDirection(string ventoText)
+    {
+        var parts = ventoText.Split(new char[] { ' ', '\u00A0', '\t', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+        return parts.LastOrDefault(p => !double.TryParse(p, NumberStyles.Any, CultureInfo.InvariantCulture, out _))
+               ?? string.Empty;
+    }
+
+    // ── Shared helpers ────────────────────────────────────────────────────────
 
     private static double ParsePrecipitation(string text)
     {
@@ -267,4 +384,8 @@ public partial class Meteo3bScraper : BaseWeatherScraper
     // Matches a single "X%" reliability value (e.g. "90%")
     [GeneratedRegex(@"(\d+)%")]
     private static partial Regex ReliabilitySingleRegex();
+
+    // Extracts the leading hour digits from a time cell text like "00:00 ..." or "03:00"
+    [GeneratedRegex(@"^\s*(\d{1,2})")]
+    private static partial Regex HourStartRegex();
 }
