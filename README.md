@@ -48,7 +48,9 @@ Yu can consume APIs to get weather data
 
 ![alt text](./docs/images/n8n-integration.png)
 
-# Changelo
+# Changelog
+## v1.0.5
+- Updated 3bmeteo web scraper (3bmeteo website was updated)
 ## v1.0.4
 - Updated 3bmeteo web scraper (3bmeteo website was refactored)
 ## v1.0.3
