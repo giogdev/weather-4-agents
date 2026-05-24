@@ -21,5 +21,10 @@ namespace Weather4Agents.Domain.Entities
         /// Weather provider where date come from
         /// </summary>
         public WeatherProvider Provider { get; set; } = new WeatherProvider("NotSet");
+        /// <summary>
+        /// Overall forecast reliability percentage (0-100) as reported by the provider.
+        /// Defaults to 100 when the provider does not expose a reliability indicator.
+        /// </summary>
+        public int ReliabilityPerc { get; set; } = 100;
     }
 }

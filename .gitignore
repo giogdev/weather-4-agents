@@ -60,4 +60,3 @@ nunit-*.xml
 /Weather4Agents.API/appsettings.Development.json
 .DS_Store
 .continue
-docs/ProviderExamples/

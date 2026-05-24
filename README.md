@@ -49,21 +49,5 @@ Yu can consume APIs to get weather data
 ![alt text](./docs/images/n8n-integration.png)
 
 # Changelog
-## v1.0.5
-- Updated 3bmeteo web scraper (3bmeteo website was updated)
-## v1.0.4
-- Updated 3bmeteo web scraper (3bmeteo website was refactored)
-## v1.0.3
-- OpenApi definitions in `<endpoint>/openapi/v1.json`
-- Refactoring of api endpoints definitions
-## v1.0.2
-- Fixed bug with mapping of word "velature sparse" (3bmeteo)
-- Custom integration for Home Assistant (Integrations/HomeAssistant)
-## v1.0.1
-- Removed Mediatr dependency and implemented a base service to handle CQRS pattern
-- Improved appsettings loading for development mode
-- Docker image for arm64 (raspberry) and amd64
-- New endpoint to get 7 days forecast
-## v1.0.0
-- Initial release
+See [CHANGELOG.md](CHANGELOG.md) for the full version history.
 

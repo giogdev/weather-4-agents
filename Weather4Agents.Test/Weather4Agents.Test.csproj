@@ -20,20 +20,16 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="..\docs\ProviderExamples\3bmeteo-v2\3bmeteo-complete1.html">
-      <Link>ProviderExamples\3bmeteo-complete1.html</Link>
+    <Content Include="..\docs\ProviderExamples\3bmeteo-v3\3bmeteo-complete1.html">
+      <Link>ProviderExamples\3bmeteo-v3-complete1.html</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="..\docs\ProviderExamples\3bmeteo-v2\3bmeteo-complete2.html">
-      <Link>ProviderExamples\3bmeteo-complete2.html</Link>
+    <Content Include="..\docs\ProviderExamples\3bmeteo-v3\3bmeteo-complete4.html">
+      <Link>ProviderExamples\3bmeteo-v3-complete4.html</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="..\docs\ProviderExamples\3bmeteo-v2\3bmeteo-complete3.html">
-      <Link>ProviderExamples\3bmeteo-complete3.html</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="..\docs\ProviderExamples\3bmeteo-v2\3bmeteo-complicated1.html">
-      <Link>ProviderExamples\3bmeteo-complicated1.html</Link>
+    <Content Include="..\docs\ProviderExamples\3bmeteo-v3\3bmeteo-today1.html">
+      <Link>ProviderExamples\3bmeteo-v3-today1.html</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>
