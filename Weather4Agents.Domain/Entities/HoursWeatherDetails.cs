@@ -51,10 +51,9 @@ namespace Weather4Agents.Domain.Entities
         /// </summary>
         public string WindDirection { get; set; } = "";
         /// <summary>
-        /// Forecast reliability percentage (0-100) extracted from provider page.
-        /// Defaults to 20 for probabilistic pages where the indicator is absent.
-        /// Defaults to 100 for standard hourly pages without an explicit reliability indicator.
+        /// Precipitation probability for this time slot (0-100), if provided by the source.
+        /// Null when the provider does not expose per-slot precipitation probability.
         /// </summary>
-        public int ReliabilityPerc { get; set; } = 100;
+        public int? PrecipitationProbabilityPerc { get; set; }
     }
 }

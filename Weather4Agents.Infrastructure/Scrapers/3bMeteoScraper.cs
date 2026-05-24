@@ -66,20 +66,28 @@ public partial class Meteo3bScraper : BaseWeatherScraper
             Provider = new WeatherProvider(ProviderName)
         };
 
-        if (doc.GetElementbyId("table_orario_ita") is not null)
+        // The table layout is used for near-future days. It appears either as:
+        //   - #table_orario_ita (days 1-2), or
+        //   - .table-previsioni-ora without the wrapper id (today/day-0).
+        var hasTableLayout =
+            doc.GetElementbyId("table_orario_ita") is not null ||
+            doc.DocumentNode.SelectSingleNode(
+                "//div[contains(@class,'table-previsioni-ora')]") is not null;
+
+        if (hasTableLayout)
         {
             // Table layout (complete1/2/today-style): flat row-table rows
-            var reliability = ParseTableReliability(doc);
-            dayWeather.HoursDetails = ParseTableHourlyItems(doc, reliability);
+            dayWeather.ReliabilityPerc = ParseTableReliability(doc);
+            dayWeather.HoursDetails = ParseTableHourlyItems(doc);
         }
         else
         {
             // Accordion layout (complete4-style and legacy): fc-accordion-item elements
             var isComplicated = IsComplicatedPage(doc);
-            var reliability = isComplicated ? 20 : ParseReliability(doc);
+            dayWeather.ReliabilityPerc = isComplicated ? 20 : ParseReliability(doc);
             dayWeather.HoursDetails = isComplicated
-                ? ParseEsaSlots(doc, reliability)
-                : ParseHourlyItems(doc, reliability);
+                ? ParseEsaSlots(doc)
+                : ParseHourlyItems(doc);
         }
 
         return dayWeather;
@@ -115,7 +123,7 @@ public partial class Meteo3bScraper : BaseWeatherScraper
             : 100;
     }
 
-    private static List<HoursWeatherDetails> ParseHourlyItems(HtmlDocument doc, int reliability)
+    private static List<HoursWeatherDetails> ParseHourlyItems(HtmlDocument doc)
     {
         var items = doc.DocumentNode.SelectNodes(
             "//div[@id='content-orario']//li[contains(@class,'fc-accordion-item')]");
@@ -131,7 +139,7 @@ public partial class Meteo3bScraper : BaseWeatherScraper
             if (!int.TryParse(timeText, out var hour) || hour is < 0 or > 23)
                 continue;
 
-            var details = ParseAccordionItem(item, new TimeOnly(hour, 0), new TimeOnly(hour, 0).AddHours(1), reliability);
+            var details = ParseAccordionItem(item, new TimeOnly(hour, 0), new TimeOnly(hour, 0).AddHours(1));
             if (details is not null)
                 results.Add(details);
         }
@@ -147,7 +155,7 @@ public partial class Meteo3bScraper : BaseWeatherScraper
         (new TimeOnly(18, 0), new TimeOnly(0,  0)),   // Ser. - Sera
     ];
 
-    private static List<HoursWeatherDetails> ParseEsaSlots(HtmlDocument doc, int reliability)
+    private static List<HoursWeatherDetails> ParseEsaSlots(HtmlDocument doc)
     {
         var items = doc.DocumentNode.SelectNodes(
             "//div[@id='content-esaorario']//li[contains(@class,'fc-accordion-item')]");
@@ -158,14 +166,14 @@ public partial class Meteo3bScraper : BaseWeatherScraper
         for (var i = 0; i < 4; i++)
         {
             var (timeFrom, timeTo) = EsaSlotDefs[i];
-            var details = ParseAccordionItem(items[i], timeFrom, timeTo, reliability);
+            var details = ParseAccordionItem(items[i], timeFrom, timeTo);
             if (details is not null)
                 results.Add(details);
         }
         return results;
     }
 
-    private static HoursWeatherDetails? ParseAccordionItem(HtmlNode item, TimeOnly timeFrom, TimeOnly timeTo, int reliability)
+    private static HoursWeatherDetails? ParseAccordionItem(HtmlNode item, TimeOnly timeFrom, TimeOnly timeTo)
     {
         // Prefer the detailed summary text; fall back to the short header label (new design) or condition span (legacy)
         var descNode = item.SelectSingleNode(".//div[contains(@class,'fc-accordion-summary-mobile')]")
@@ -173,8 +181,10 @@ public partial class Meteo3bScraper : BaseWeatherScraper
                     ?? item.SelectSingleNode(".//div[contains(@class,'fc-accordion-condition')]//span[contains(@class,'ds-body-medium')]");
         var description = HtmlEntity.DeEntitize(descNode?.InnerText ?? string.Empty).Trim();
 
-        // Temperature: data-temp-c attribute on span.unit-temp (class name varies across designs)
-        var tempSpan = item.SelectSingleNode(".//span[contains(@class,'unit-temp')]");
+        // Temperature: data-temp-c attribute on span.unit-temp.
+        // Use word-boundary match to avoid matching span.unit-tempo (weather description).
+        var tempSpan = item.SelectSingleNode(
+            ".//span[contains(concat(' ', normalize-space(@class), ' '), ' unit-temp ')]");
         double.TryParse(
             tempSpan?.GetAttributeValue("data-temp-c", "0").Trim(),
             NumberStyles.Any, CultureInfo.InvariantCulture, out var tempC);
@@ -193,19 +203,22 @@ public partial class Meteo3bScraper : BaseWeatherScraper
 
         var pressureMbar = (int)ParseFirstDouble(GetParamValue(item, "pressione"));
 
+        var probText = GetParamValue(item, "probabilita").Replace("%", "").Trim();
+        int? precipProb = int.TryParse(probText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var p) ? p : null;
+
         return new HoursWeatherDetails
         {
-            TimeFrom               = timeFrom,
-            TimeTo                 = timeTo,
-            WeatherType            = MapWeatherType(description),
-            WeatherTypeDescription = description,
-            TemperatureC           = tempC,
-            PrecipitationMm        = precipMm,
-            HumidityPerc           = humidity,
-            PressionMbar           = pressureMbar,
-            WindKmh                = windKmh,
-            WindDirection          = windDir,
-            ReliabilityPerc        = reliability,
+            TimeFrom                     = timeFrom,
+            TimeTo                       = timeTo,
+            WeatherType                  = MapWeatherType(description),
+            WeatherTypeDescription       = description,
+            TemperatureC                 = tempC,
+            PrecipitationMm              = precipMm,
+            HumidityPerc                 = humidity,
+            PressionMbar                 = pressureMbar,
+            WindKmh                      = windKmh,
+            WindDirection                = windDir,
+            PrecipitationProbabilityPerc = precipProb,
         };
     }
 
@@ -240,10 +253,11 @@ public partial class Meteo3bScraper : BaseWeatherScraper
             : 100;
     }
 
-    private static List<HoursWeatherDetails> ParseTableHourlyItems(HtmlDocument doc, int reliability)
+    private static List<HoursWeatherDetails> ParseTableHourlyItems(HtmlDocument doc)
     {
         var rows = doc.DocumentNode.SelectNodes(
-            "//div[@id='table_orario_ita']//div[contains(@class,'row-table') and contains(@class,'noPad')]");
+            "//div[@id='table_orario_ita' or contains(@class,'table-previsioni-ora')]" +
+            "//div[contains(@class,'row-table') and contains(@class,'noPad')]");
         if (rows is null)
             return [];
 
@@ -305,7 +319,6 @@ public partial class Meteo3bScraper : BaseWeatherScraper
                 PressionMbar           = pressureMbar,
                 WindKmh                = windKmh,
                 WindDirection          = windDir,
-                ReliabilityPerc        = reliability,
             });
         }
 

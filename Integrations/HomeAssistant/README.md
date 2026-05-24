@@ -75,7 +75,7 @@ Add a weather forecast card to any dashboard:
 
 ```yaml
 type: weather-forecast
-entity: weather.weather4agents_nembro
+entity: weather.weather4agents_bergamo
 forecast_type: daily   # or "hourly"
 ```
 

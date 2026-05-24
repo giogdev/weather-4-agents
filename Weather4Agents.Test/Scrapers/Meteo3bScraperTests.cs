@@ -36,6 +36,16 @@ public class Meteo3bScraperTests
     private static string ComplicatedHtml =>
         File.ReadAllText(Path.Combine("ProviderExamples", "3bmeteo-complicated1.html"));
 
+    // v3 HTML examples
+    private static string V3Complete1Html =>
+        File.ReadAllText(Path.Combine("ProviderExamples", "3bmeteo-v3-complete1.html"));
+
+    private static string V3Complete4Html =>
+        File.ReadAllText(Path.Combine("ProviderExamples", "3bmeteo-v3-complete4.html"));
+
+    private static string V3TodayHtml =>
+        File.ReadAllText(Path.Combine("ProviderExamples", "3bmeteo-v3-today1.html"));
+
     // -------------------------------------------------------------------------
     // Hourly page — slot count and ordering
     // -------------------------------------------------------------------------
@@ -109,7 +119,7 @@ public class Meteo3bScraperTests
 
         var result = InvokeParseDayPage(scraper, ComplicatedHtml, new DateOnly(2026, 5, 16));
 
-        Assert.All(result.HoursDetails, h => Assert.Equal(20, h.ReliabilityPerc));
+        Assert.Equal(20, result.ReliabilityPerc);
     }
 
     // -------------------------------------------------------------------------
@@ -125,7 +135,7 @@ public class Meteo3bScraperTests
         var result = InvokeParseDayPage(scraper, Complete1Html, new DateOnly(2026, 5, 14));
 
         Assert.NotEmpty(result.HoursDetails);
-        Assert.All(result.HoursDetails, h => Assert.Equal(90, h.ReliabilityPerc));
+        Assert.Equal(90, result.ReliabilityPerc);
     }
 
     [Fact]
@@ -137,7 +147,7 @@ public class Meteo3bScraperTests
         var result = InvokeParseDayPage(scraper, Complete3Html, new DateOnly(2026, 5, 14));
 
         Assert.NotEmpty(result.HoursDetails);
-        Assert.All(result.HoursDetails, h => Assert.Equal(95, h.ReliabilityPerc));
+        Assert.Equal(95, result.ReliabilityPerc);
     }
 
     [Fact]
@@ -181,7 +191,7 @@ public class Meteo3bScraperTests
         var result = InvokeParseDayPage(scraper, html, new DateOnly(2026, 5, 14));
 
         Assert.NotEmpty(result.HoursDetails);
-        Assert.All(result.HoursDetails, h => Assert.Equal(100, h.ReliabilityPerc));
+        Assert.Equal(100, result.ReliabilityPerc);
     }
 
     // -------------------------------------------------------------------------
@@ -425,6 +435,99 @@ public class Meteo3bScraperTests
         var result = InvokeParseDayPage(scraper, html, new DateOnly(2026, 5, 14));
 
         Assert.Equal(WeatherType.Thunderstorm, result.HoursDetails[0].WeatherType);
+    }
+
+    // -------------------------------------------------------------------------
+    // Precipitation probability
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public void ParseDayPage_AccordionLayout_SlotsHavePrecipitationProbability()
+    {
+        // Accordion pages carry data-param="probabilita" per slot
+        var scraper = CreateScraper();
+
+        var result = InvokeParseDayPage(scraper, Complete3Html, new DateOnly(2026, 5, 14));
+
+        Assert.NotEmpty(result.HoursDetails);
+        Assert.All(result.HoursDetails, h => Assert.NotNull(h.PrecipitationProbabilityPerc));
+    }
+
+    [Fact]
+    public void ParseDayPage_V3AccordionLayout_Hour00_PrecipitationProbabilityIsZero()
+    {
+        // 3bmeteo-v3-complete4.html: hour 00 has data-param="probabilita" = 0%
+        var scraper = CreateScraper();
+
+        var result = InvokeParseDayPage(scraper, V3Complete4Html, new DateOnly(2026, 5, 14));
+
+        Assert.Equal(0, GetHourSlot(result, 0).PrecipitationProbabilityPerc);
+    }
+
+    [Fact]
+    public void ParseDayPage_TableLayout_SlotsHaveNullPrecipitationProbability()
+    {
+        // Table layout does not expose per-slot precipitation probability
+        var scraper = CreateScraper();
+
+        var result = InvokeParseDayPage(scraper, V3Complete1Html, new DateOnly(2026, 5, 14));
+
+        Assert.NotEmpty(result.HoursDetails);
+        Assert.All(result.HoursDetails, h => Assert.Null(h.PrecipitationProbabilityPerc));
+    }
+
+    // -------------------------------------------------------------------------
+    // v3 HTML — table layout (complete1) and accordion layout (complete4)
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public void ParseDayPage_V3TableLayout_Returns24HourlyForecasts()
+    {
+        var scraper = CreateScraper();
+
+        var result = InvokeParseDayPage(scraper, V3Complete1Html, new DateOnly(2026, 5, 14));
+
+        Assert.Equal(24, result.HoursDetails.Count);
+    }
+
+    [Fact]
+    public void ParseDayPage_V3TableLayout_Hour00_TemperatureIsNonZero()
+    {
+        var scraper = CreateScraper();
+
+        var result = InvokeParseDayPage(scraper, V3Complete1Html, new DateOnly(2026, 5, 14));
+
+        Assert.NotEqual(0, GetHourSlot(result, 0).TemperatureC);
+    }
+
+    [Fact]
+    public void ParseDayPage_V3AccordionLayout_ReturnsHourlyForecasts()
+    {
+        var scraper = CreateScraper();
+
+        var result = InvokeParseDayPage(scraper, V3Complete4Html, new DateOnly(2026, 5, 14));
+
+        Assert.NotEmpty(result.HoursDetails);
+    }
+
+    [Fact]
+    public void ParseDayPage_V3AccordionLayout_Hour00_TemperatureIsNonZero()
+    {
+        var scraper = CreateScraper();
+
+        var result = InvokeParseDayPage(scraper, V3Complete4Html, new DateOnly(2026, 5, 14));
+
+        Assert.NotEqual(0, GetHourSlot(result, 0).TemperatureC);
+    }
+
+    [Fact]
+    public void ParseDayPage_V3TodayPage_ReturnsHourlyForecasts()
+    {
+        var scraper = CreateScraper();
+
+        var result = InvokeParseDayPage(scraper, V3TodayHtml, new DateOnly(2026, 5, 14));
+
+        Assert.NotEmpty(result.HoursDetails);
     }
 
     private static string BuildMinimalHourlyHtml(string hour, string summaryDescription) => $"""

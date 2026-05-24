@@ -22,7 +22,7 @@ public class WeatherController : ControllerBase
     }
 
     /// <summary>
-    /// Retrieves the weather forecast for the next <paramref name="numberOfDays"/> days using the specified provider (or the default one if omitted).
+    /// Forecast for the next <paramref name="numberOfDays"/> days
     /// </summary>
     /// <param name="location">Location name. If location contains spaces, use URL encoding.</param>
     /// <param name="numberOfDays">Number of days to return</param>
@@ -45,7 +45,7 @@ public class WeatherController : ControllerBase
     }
 
     /// <summary>
-    /// Retrieves the 7-day weather forecast using the specified provider (or the default one if omitted).
+    /// 7-day weather forecast
     /// </summary>
     /// <param name="location">Location name. If location contains spaces, use URL encoding.</param>
     /// <param name="provider">Optional provider name. If omitted, the default provider is used.</param>
@@ -67,7 +67,7 @@ public class WeatherController : ControllerBase
     }
 
     /// <summary>
-    /// Retrieves the weather for a specific day using the specified provider (or the default one if omitted).
+    /// Weather for a specific day
     /// </summary>
     /// <param name="location">Location name. If location contains spaces, use URL encoding.</param>
     /// <param name="date">Date for which to retrieve weather information.</param>

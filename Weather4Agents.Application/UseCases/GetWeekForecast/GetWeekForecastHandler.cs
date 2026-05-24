@@ -29,6 +29,7 @@ public class GetWeekForecastHandler : IQueryHandler<GetWeekForecastQuery, WeekFo
             .Select(d => new DayForecastEntry
             {
                 Date = d.Date,
+                ReliabilityPerc = d.ReliabilityPerc,
                 HoursDetails = d.HoursDetails
             });
 
