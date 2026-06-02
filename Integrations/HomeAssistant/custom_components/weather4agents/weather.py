@@ -44,7 +44,11 @@ async def async_setup_entry(
 
 
 def _map_condition(weather_type: str) -> str:
-    return CONDITION_MAP.get(weather_type, "exceptional")
+    condition = CONDITION_MAP.get(weather_type)
+    if condition is None:
+        _LOGGER.warning("Unknown weatherType '%s' — falling back to 'exceptional'", weather_type)
+        return "exceptional"
+    return condition
 
 
 def _worst_condition(conditions: list[str]) -> str:

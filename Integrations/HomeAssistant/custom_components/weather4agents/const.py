@@ -36,6 +36,7 @@ CONDITION_MAP: dict[str, str] = {
     "Overcast": "cloudy",
     "Foggy": "fog",
     "Rainy": "rainy",
+    "LightRain": "rainy",
     "ProbablyRainy": "rainy",
     "HeavyRain": "pouring",
     "Thunderstorm": "lightning-rainy",
