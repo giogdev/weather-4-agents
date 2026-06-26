@@ -1,4 +1,6 @@
 # Changelog
+## v1.2.0
+- New endpoint to get the next 24 hours forecast as hourly slots (`{location}/forecast/next-24h`)
 ## v1.1.0
 - Moved forecast reliability percentage from hourly slot level to day level (`DayWeather.ReliabilityPerc` / `DayForecastEntry.ReliabilityPerc`)
 - Added per-slot precipitation probability (`HoursWeatherDetails.PrecipitationProbabilityPerc`), exposed when the provider supplies it

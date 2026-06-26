@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
 using Weather4Agents.Application.CQRS;
+using Weather4Agents.Application.DTOs;
 using Weather4Agents.Application.UseCases.GetDayWeather;
+using Weather4Agents.Application.UseCases.GetNext24HoursForecast;
 using Weather4Agents.Application.UseCases.GetWeatherForecast;
 using Weather4Agents.Application.UseCases.GetWeekForecast;
 using Weather4Agents.Domain.Entities;
@@ -58,6 +60,28 @@ public class WeatherController : ControllerBase
         try
         {
             var result = await _dispatcher.SendAsync(new GetWeekForecastQuery(location, provider), ct);
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Problem(detail: ex.Message, statusCode: StatusCodes.Status404NotFound);
+        }
+    }
+
+    /// <summary>
+    /// Forecast for the next 24 hours
+    /// </summary>
+    /// <param name="location">Location name. If location contains spaces, use URL encoding.</param>
+    /// <param name="provider">Optional provider name. If omitted, the default provider is used.</param>
+    /// <param name="ct"></param>
+    [HttpGet("{location}/forecast/next-24h")]
+    [ProducesResponseType<Next24HoursForecastResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetNext24HoursForecast(string location, [FromQuery] string? provider, CancellationToken ct)
+    {
+        try
+        {
+            var result = await _dispatcher.SendAsync(new GetNext24HoursForecastQuery(location, provider), ct);
             return Ok(result);
         }
         catch (InvalidOperationException ex)
