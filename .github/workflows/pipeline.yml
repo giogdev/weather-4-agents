@@ -25,6 +25,14 @@ jobs:
           dotnet-version: ${{ env.DOTNET_VERSION }}
       - name: Restore dependencies
         run: dotnet restore
+      - name: Check for vulnerable packages
+        run: |
+          set -o pipefail
+          dotnet list package --vulnerable --include-transitive | tee vulnerable-packages.txt
+          if grep -qiE '\b(high|critical)\b' vulnerable-packages.txt; then
+            echo "::error::High/critical severity vulnerable package(s) detected (see log above)"
+            exit 1
+          fi
       - name: Build
         run: dotnet build --no-restore
       - name: Test

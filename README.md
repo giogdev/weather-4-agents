@@ -27,6 +27,18 @@ Configurable parameters (.env)
 | `WeatherFileStorage__JobIntervalMinutes` | `60` | File storage job interval in minutes |
 | `WeatherFileStorage__CleanupEnabled` | `false` | If `true`, deletes JSON files older than yesterday on each cycle |
 > ℹ️ See [the documentation](docs/docker.md) for further details on Docker
+## Configuration and secrets
+Environment-specific settings are loaded through the standard ASP.NET Core mechanism
+(`appsettings.{Environment}.json`, selected by `ASPNETCORE_ENVIRONMENT`).
+
+**Never put secrets (passwords, tokens, API keys) in `appsettings*.json` files**: they are
+committed to a public repository. Use instead:
+- **Development**: [User Secrets](https://learn.microsoft.com/aspnet/core/security/app-secrets)
+  — the API project already has a `UserSecretsId`, so `dotnet user-secrets set "Key" "value" --project Weather4Agents.API` works out of the box
+- **Production / Docker**: environment variables (e.g. `Section__Key=value` in `.env`)
+
+Any secret that ends up in a commit must be considered compromised and rotated immediately,
+even if the file is later removed or gitignored.
 ## Available providers:
 | Provider | Name | Status |
 |---|---|---|

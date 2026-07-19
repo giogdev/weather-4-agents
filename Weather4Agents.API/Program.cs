@@ -5,13 +5,9 @@ using Weather4Agents.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
 
-#if DEBUG
-builder.Configuration.AddJsonFile("appsettings.Development.json", optional: true, reloadOnChange: true);
-#endif
-
-#if RELEASE
-builder.Configuration.AddJsonFile("appsettings.Release.json", optional: true, reloadOnChange: true);
-#endif
+// Environment-specific settings (appsettings.{Environment}.json) are loaded by the host
+// based on ASPNETCORE_ENVIRONMENT; secrets come from User Secrets in Development and
+// environment variables in Production — never from committed files.
 
 builder.Services.AddControllers();
 builder.Services.AddOpenApi(options =>
@@ -37,11 +33,9 @@ builder.Services.AddInfrastructure(builder.Configuration);
 
 var app = builder.Build();
 
-if (app.Environment.IsDevelopment())
-{
-   
-}
-
+// OpenAPI document and Scalar UI are intentionally exposed in every environment:
+// the API is meant for agents and self-hosted LAN deployments, where the schema
+// is part of the product surface.
 app.MapOpenApi();
 app.MapScalarApiReference(options =>
 {
