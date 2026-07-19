@@ -55,7 +55,7 @@ public partial class Meteo3bScraper : BaseWeatherScraper
         return results;
     }
 
-    private DayWeather ParseDayPage(string html, DateOnly date)
+    internal DayWeather ParseDayPage(string html, DateOnly date)
     {
         var doc = new HtmlDocument();
         doc.LoadHtml(html);

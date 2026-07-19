@@ -31,6 +31,9 @@ builder.Services.AddOpenApi(options =>
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 
+// System clock; integration tests replace this with a fake to pin time.
+builder.Services.AddSingleton(TimeProvider.System);
+
 var app = builder.Build();
 
 // OpenAPI document and Scalar UI are intentionally exposed in every environment:
@@ -48,3 +51,6 @@ app.MapScalarApiReference(options =>
 app.MapControllers();
 
 app.Run();
+
+// Exposes the implicit entry-point class to WebApplicationFactory<Program> in integration tests.
+public partial class Program { }
