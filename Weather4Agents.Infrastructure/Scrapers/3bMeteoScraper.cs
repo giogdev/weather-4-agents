@@ -15,9 +15,16 @@ public partial class Meteo3bScraper : BaseWeatherScraper
 {
     private const string BaseUrl = "https://www.3bmeteo.com/meteo";
 
-    public Meteo3bScraper(HttpClient httpClient, HybridCache hybridCache)
+    // Pages without the hourly detail tab only expose four coarse six-hour slots,
+    // so the forecast is treated as low-confidence regardless of what the page claims.
+    private const int DegradedPageReliabilityPerc = 20;
+
+    private readonly Meteo3bWeatherTypeMapper _weatherTypeMapper;
+
+    public Meteo3bScraper(HttpClient httpClient, HybridCache hybridCache, Meteo3bWeatherTypeMapper weatherTypeMapper)
         : base(httpClient, hybridCache)
     {
+        _weatherTypeMapper = weatherTypeMapper;
         HttpClient.DefaultRequestHeaders.UserAgent.ParseAdd(
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36");
     }
@@ -84,7 +91,7 @@ public partial class Meteo3bScraper : BaseWeatherScraper
         {
             // Accordion layout (complete4-style and legacy): fc-accordion-item elements
             var isComplicated = IsComplicatedPage(doc);
-            dayWeather.ReliabilityPerc = isComplicated ? 20 : ParseReliability(doc);
+            dayWeather.ReliabilityPerc = isComplicated ? DegradedPageReliabilityPerc : ParseReliability(doc);
             dayWeather.HoursDetails = isComplicated
                 ? ParseEsaSlots(doc)
                 : ParseHourlyItems(doc);
@@ -123,7 +130,7 @@ public partial class Meteo3bScraper : BaseWeatherScraper
             : 100;
     }
 
-    private static List<HoursWeatherDetails> ParseHourlyItems(HtmlDocument doc)
+    private List<HoursWeatherDetails> ParseHourlyItems(HtmlDocument doc)
     {
         var items = doc.DocumentNode.SelectNodes(
             "//div[@id='content-orario']//li[contains(@class,'fc-accordion-item')]");
@@ -155,7 +162,7 @@ public partial class Meteo3bScraper : BaseWeatherScraper
         (new TimeOnly(18, 0), new TimeOnly(0,  0)),   // Ser. - Sera
     ];
 
-    private static List<HoursWeatherDetails> ParseEsaSlots(HtmlDocument doc)
+    private List<HoursWeatherDetails> ParseEsaSlots(HtmlDocument doc)
     {
         var items = doc.DocumentNode.SelectNodes(
             "//div[@id='content-esaorario']//li[contains(@class,'fc-accordion-item')]");
@@ -173,7 +180,7 @@ public partial class Meteo3bScraper : BaseWeatherScraper
         return results;
     }
 
-    private static HoursWeatherDetails? ParseAccordionItem(HtmlNode item, TimeOnly timeFrom, TimeOnly timeTo)
+    private HoursWeatherDetails? ParseAccordionItem(HtmlNode item, TimeOnly timeFrom, TimeOnly timeTo)
     {
         // Prefer the detailed summary text; fall back to the short header label (new design) or condition span (legacy)
         var descNode = item.SelectSingleNode(".//div[contains(@class,'fc-accordion-summary-mobile')]")
@@ -210,7 +217,7 @@ public partial class Meteo3bScraper : BaseWeatherScraper
         {
             TimeFrom                     = timeFrom,
             TimeTo                       = timeTo,
-            WeatherType                  = MapWeatherType(description),
+            WeatherType                  = _weatherTypeMapper.Map(description),
             WeatherTypeDescription       = description,
             TemperatureC                 = tempC,
             PrecipitationMm              = precipMm,
@@ -253,7 +260,7 @@ public partial class Meteo3bScraper : BaseWeatherScraper
             : 100;
     }
 
-    private static List<HoursWeatherDetails> ParseTableHourlyItems(HtmlDocument doc)
+    private List<HoursWeatherDetails> ParseTableHourlyItems(HtmlDocument doc)
     {
         var rows = doc.DocumentNode.SelectNodes(
             "//div[@id='table_orario_ita' or contains(@class,'table-previsioni-ora')]" +
@@ -311,7 +318,7 @@ public partial class Meteo3bScraper : BaseWeatherScraper
             {
                 TimeFrom               = timeFrom,
                 TimeTo                 = timeTo,
-                WeatherType            = MapWeatherType(description),
+                WeatherType            = _weatherTypeMapper.Map(description),
                 WeatherTypeDescription = description,
                 TemperatureC           = tempC,
                 PrecipitationMm        = precipMm,
@@ -353,41 +360,6 @@ public partial class Meteo3bScraper : BaseWeatherScraper
         return match.Success
             ? double.Parse(match.Value, CultureInfo.InvariantCulture)
             : 0d;
-    }
-
-    // Order matters: more specific conditions must appear before generic ones.
-    // LightRain must precede PartlyCloudy because "nubi sparse con possibili piogge"
-    // contains "nubi sparse" which would otherwise match PartlyCloudy first.
-    private static readonly (Func<string, bool> Matches, string WeatherType)[] WeatherMappings =
-    [
-        (d => d.Contains("temporal"),                                                                                                    WeatherType.Thunderstorm),
-        (d => d.Contains("grandine"),                                                                                                    WeatherType.Hail),
-        (d => d.Contains("neve abbondante") || d.Contains("bufera"),                                                                    WeatherType.HeavySnow),
-        (d => d.Contains("nevischio") || d.Contains("pioggia mista a neve"),                                                           WeatherType.Sleet),
-        (d => d.Contains("neve"),                                                                                                        WeatherType.Snowy),
-        (d => d.Contains("pioggia forte") || d.Contains("acquazzone") || d.Contains("rovescio forte"),                                 WeatherType.HeavyRain),
-        (d => d.Contains("pioggia") || d.Contains("rovescio") || d.Contains("rovesci") || d.Contains("pioggere"),                     WeatherType.Rainy),
-        (d => d.Contains("nebbia") || d.Contains("foschia"),                                                                           WeatherType.Foggy),
-        (d => d.Contains("coperto"),                                                                                                     WeatherType.Overcast),
-        (d => d.Contains("possibili piogge") && (d.Contains("nubi sparse") || d.Contains("poco nuvoloso") || d.Contains("parz")),     WeatherType.LightRain),
-        (d => d.Contains("possibili piogge"),                                                                                           WeatherType.ProbablyRainy),
-        (d => d.Contains("sereno") && (d.Contains("poco nuvoloso") || d.Contains("parz")),                                            WeatherType.Sunny),
-        (d => d.Contains("parz") || d.Contains("poco nuvoloso") || d.Contains("variabile") || d.Contains("nubi sparse"),              WeatherType.PartlyCloudy),
-        (d => d.Contains("nuvoloso"),                                                                                                    WeatherType.Cloudy),
-        (d => d.Contains("sereno") || d.Contains("soleggiato"),                                                                        WeatherType.Sunny),
-        (d => d.Contains("vento forte"),                                                                                                 WeatherType.HeavyWindy),
-        (d => d.Contains("velature"),                                                                                                    WeatherType.LightClouds),
-    ];
-
-    private static string MapWeatherType(string description)
-    {
-        var d = description.ToLowerInvariant();
-        foreach (var (matches, weatherType) in WeatherMappings)
-        {
-            if (matches(d))
-                return weatherType;
-        }
-        return WeatherType.Unknown;
     }
 
     // Matches integers and decimals with dot or comma as separator

@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using Weather4Agents.Domain.Entities;
 using Weather4Agents.Domain.Enums;
 using Weather4Agents.Infrastructure.Scrapers;
@@ -14,7 +15,8 @@ public class Meteo3bScraperTests
         services.AddHybridCache();
         var provider = services.BuildServiceProvider();
         var hybridCache = provider.GetRequiredService<HybridCache>();
-        return new Meteo3bScraper(new HttpClient(), hybridCache);
+        var mapper = new Meteo3bWeatherTypeMapper(NullLogger<Meteo3bWeatherTypeMapper>.Instance);
+        return new Meteo3bScraper(new HttpClient(), hybridCache, mapper);
     }
 
     // v3 HTML examples

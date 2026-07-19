@@ -18,6 +18,8 @@ public static class DependencyInjection
         services.Configure<WeatherScrapingSettings>(
             configuration.GetSection(WeatherScrapingSettings.SectionName));
 
+        services.AddSingleton<Meteo3bWeatherTypeMapper>();
+
         // Typed HTTP clients
         services.AddHttpClient<Meteo3bScraper>();
 
