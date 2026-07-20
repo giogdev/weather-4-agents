@@ -28,8 +28,10 @@ public class Weather4AgentsApiFactory : WebApplicationFactory<Program>
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
-        // The resolver picks the default provider from configuration.
+        // The resolver picks the default provider from configuration; startup validation
+        // additionally requires it to be one of the enabled providers, so set both to the fake.
         builder.UseSetting("WeatherScraping:DefaultProvider", FakeWeatherProviderScraper.Name);
+        builder.UseSetting("WeatherScraping:EnabledProviders:0", FakeWeatherProviderScraper.Name);
 
         builder.ConfigureTestServices(services =>
         {
