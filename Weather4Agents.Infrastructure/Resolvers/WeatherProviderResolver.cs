@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Options;
 using Weather4Agents.Application.Interfaces.Scrapers;
 using Weather4Agents.Application.Settings;
+using Weather4Agents.Domain.Exceptions;
 
 namespace Weather4Agents.Infrastructure.Resolvers;
 
@@ -30,8 +31,7 @@ public class WeatherProviderResolver : IWeatherProviderResolver
     public IWeatherProviderScraper GetByName(string providerName)
         => _scrapers.TryGetValue(providerName, out var scraper)
             ? scraper
-            : throw new InvalidOperationException(
-                $"Provider '{providerName}' not found. Available: {string.Join(", ", _scrapers.Keys)}");
+            : throw new ProviderNotFoundException(providerName, _scrapers.Keys.ToArray());
 
     public IEnumerable<string> GetAvailableProviders()
         => _scrapers.Keys;

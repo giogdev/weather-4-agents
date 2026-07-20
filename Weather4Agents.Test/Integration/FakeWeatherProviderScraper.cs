@@ -15,15 +15,30 @@ public class FakeWeatherProviderScraper : IWeatherProviderScraper
     private readonly Dictionary<string, IReadOnlyList<DayWeather>> _forecasts =
         new(StringComparer.OrdinalIgnoreCase);
 
+    private readonly HashSet<string> _failing =
+        new(StringComparer.OrdinalIgnoreCase);
+
     public string ProviderName => Name;
 
     public void SetForecast(string location, params DayWeather[] days)
         => _forecasts[location] = days;
 
+    /// <summary>
+    /// Makes <see cref="GetForecastAsync"/> throw an unexpected exception for the given
+    /// location, simulating an unhandled failure deep in the pipeline.
+    /// </summary>
+    public void FailFor(string location)
+        => _failing.Add(location);
+
     public Task<IEnumerable<DayWeather>> GetForecastAsync(
         string location,
         bool forceRefresh = false,
         CancellationToken ct = default)
-        => Task.FromResult<IEnumerable<DayWeather>>(
+    {
+        if (_failing.Contains(location))
+            throw new InvalidOperationException($"Simulated scraper failure for '{location}'.");
+
+        return Task.FromResult<IEnumerable<DayWeather>>(
             _forecasts.TryGetValue(location, out var days) ? days : []);
+    }
 }

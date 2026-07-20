@@ -1,4 +1,5 @@
 using Scalar.AspNetCore;
+using Weather4Agents.API.Errors;
 using Weather4Agents.API.OpenApi;
 using Weather4Agents.Application;
 using Weather4Agents.Infrastructure;
@@ -10,6 +11,12 @@ var builder = WebApplication.CreateBuilder(args);
 // environment variables in Production — never from committed files.
 
 builder.Services.AddControllers();
+
+// Central error handling: domain exceptions and unexpected failures are turned into
+// ProblemDetails responses by GlobalExceptionHandler instead of per-controller try/catch.
+builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+
 builder.Services.AddOpenApi(options =>
 {
     options.AddOperationTransformer(new XmlDocumentationTransformer());
@@ -35,6 +42,9 @@ builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddSingleton(TimeProvider.System);
 
 var app = builder.Build();
+
+// Route unhandled exceptions through GlobalExceptionHandler before anything else.
+app.UseExceptionHandler();
 
 // OpenAPI document and Scalar UI are intentionally exposed in every environment:
 // the API is meant for agents and self-hosted LAN deployments, where the schema

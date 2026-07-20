@@ -87,16 +87,41 @@ public class WeatherEndpointsTests
     }
 
     [Fact]
-    public async Task GetForecastByDays_WithUnknownProvider_Returns404Problem()
+    public async Task GetForecastByDays_WithUnknownProvider_Returns400ProblemListingProviders()
     {
         await using var factory = new Weather4AgentsApiFactory();
         using var client = factory.CreateClient();
 
         var response = await client.GetAsync("/api/weather/bergamo/forecast/days/3?provider=nope");
 
-        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         var problem = JsonNode.Parse(await response.Content.ReadAsStringAsync())!;
         Assert.Contains("nope", (string?)problem["detail"]);
+        // The available providers are listed both in the human-readable detail and as a
+        // machine-readable extension so agents can recover without parsing prose.
+        Assert.Contains(FakeWeatherProviderScraper.Name, (string?)problem["detail"]);
+        var available = problem["availableProviders"]!.AsArray()
+            .Select(p => (string?)p);
+        Assert.Contains(FakeWeatherProviderScraper.Name, available);
+    }
+
+    [Fact]
+    public async Task GetForecastByDays_WhenScraperThrowsUnexpectedly_Returns500ProblemWithoutStackTrace()
+    {
+        await using var factory = new Weather4AgentsApiFactory();
+        factory.Scraper.FailFor("bergamo");
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/api/weather/bergamo/forecast/days/3");
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync();
+        var problem = JsonNode.Parse(body)!;
+        Assert.Equal(500, (int?)problem["status"]);
+        // Nothing about the internal failure must leak to the client.
+        Assert.DoesNotContain("Simulated scraper failure", body);
+        Assert.DoesNotContain("at Weather4Agents", body);
+        Assert.DoesNotContain("InvalidOperationException", body);
     }
 
     [Fact]
