@@ -19,7 +19,7 @@ public class GetNext24HoursForecastHandler : IQueryHandler<GetNext24HoursForecas
             ? _resolver.GetByName(query.ProviderName)
             : _resolver.GetDefault();
 
-        var allDays = await scraper.GetForecastAsync(query.Location, forceRefresh: false, ct);
+        var allDays = await scraper.GetForecastOrNotFoundAsync(query.Location, ct);
 
         var now = DateTime.Now;
         var windowEnd = now.AddHours(24);

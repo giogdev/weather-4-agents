@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.RegularExpressions;
 using HtmlAgilityPack;
 using Microsoft.Extensions.Caching.Hybrid;
+using Microsoft.Extensions.Logging;
 using Weather4Agents.Domain.Entities;
 using Weather4Agents.Domain.Enums;
 using Weather4Agents.Infrastructure.Scrapers.Base;
@@ -21,8 +22,12 @@ public partial class Meteo3bScraper : BaseWeatherScraper
 
     private readonly Meteo3bWeatherTypeMapper _weatherTypeMapper;
 
-    public Meteo3bScraper(HttpClient httpClient, HybridCache hybridCache, Meteo3bWeatherTypeMapper weatherTypeMapper)
-        : base(httpClient, hybridCache)
+    public Meteo3bScraper(
+        HttpClient httpClient,
+        HybridCache hybridCache,
+        Meteo3bWeatherTypeMapper weatherTypeMapper,
+        ILogger<Meteo3bScraper> logger)
+        : base(httpClient, hybridCache, logger)
     {
         _weatherTypeMapper = weatherTypeMapper;
         HttpClient.DefaultRequestHeaders.UserAgent.ParseAdd(
@@ -53,9 +58,16 @@ public partial class Meteo3bScraper : BaseWeatherScraper
                 if (dayWeather.HoursDetails.Count > 0)
                     results.Add(dayWeather);
             }
-            catch (HttpRequestException)
+            catch (HttpRequestException ex)
             {
-                // Skip days whose page fails to load
+                // Skip days whose page fails to load; the remaining days are still scraped.
+                Logger.LogWarning(ex, "Failed to fetch 3bMeteo day page {Url}: {Reason}", url, ex.Message);
+            }
+            catch (TaskCanceledException ex) when (!ct.IsCancellationRequested)
+            {
+                // An HTTP timeout (the caller did not cancel) skips this day like any other fetch
+                // failure instead of aborting the whole scrape.
+                Logger.LogWarning(ex, "Timed out fetching 3bMeteo day page {Url}: {Reason}", url, ex.Message);
             }
         }
 

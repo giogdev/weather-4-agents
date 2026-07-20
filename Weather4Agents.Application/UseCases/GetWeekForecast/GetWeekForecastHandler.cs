@@ -19,7 +19,7 @@ public class GetWeekForecastHandler : IQueryHandler<GetWeekForecastQuery, WeekFo
             ? _resolver.GetByName(query.ProviderName)
             : _resolver.GetDefault();
 
-        var allDays = await scraper.GetForecastAsync(query.Location, forceRefresh: false, ct);
+        var allDays = await scraper.GetForecastOrNotFoundAsync(query.Location, ct);
 
         var today = DateOnly.FromDateTime(DateTime.Today);
         var forecast = allDays

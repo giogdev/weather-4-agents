@@ -19,7 +19,7 @@ public class GetWeatherForecastHandler : IQueryHandler<GetWeatherForecastQuery, 
             ? _resolver.GetByName(query.ProviderName)
             : _resolver.GetDefault();
 
-        var forecast = await scraper.GetForecastAsync(query.Location, forceRefresh: false, ct);
+        var forecast = await scraper.GetForecastOrNotFoundAsync(query.Location, ct);
 
         return query.Days.HasValue
             ? forecast.Take(query.Days.Value)

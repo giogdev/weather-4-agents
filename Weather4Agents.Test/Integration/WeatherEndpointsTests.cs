@@ -62,16 +62,40 @@ public class WeatherEndpointsTests
     }
 
     [Fact]
-    public async Task GetForecastByDays_WhenScrapeIsEmpty_ReturnsEmptyJsonArray()
+    public async Task GetForecastByDays_WhenScrapeIsEmpty_Returns404Problem()
     {
         await using var factory = new Weather4AgentsApiFactory();
         using var client = factory.CreateClient();
 
         var response = await client.GetAsync("/api/weather/nowhere/forecast/days/3");
 
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var days = JsonNode.Parse(await response.Content.ReadAsStringAsync())!.AsArray();
-        Assert.Empty(days);
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        var problem = JsonNode.Parse(await response.Content.ReadAsStringAsync())!;
+        Assert.Equal(404, (int?)problem["status"]);
+        Assert.Equal("Location not found", (string?)problem["title"]);
+        Assert.Contains("nowhere", (string?)problem["detail"]);
+    }
+
+    [Fact]
+    public async Task GetWeekForecast_WhenScrapeIsEmpty_Returns404Problem()
+    {
+        await using var factory = new Weather4AgentsApiFactory();
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/api/weather/nowhere/forecast/week");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetNext24Hours_WhenScrapeIsEmpty_Returns404Problem()
+    {
+        await using var factory = new Weather4AgentsApiFactory();
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/api/weather/nowhere/forecast/next-24h");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
     [Fact]
