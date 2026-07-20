@@ -59,7 +59,9 @@ public class WeatherFileStorageJob : BackgroundService
         }
     }
 
-    private async Task RunStorageCycleAsync(CancellationToken ct)
+    // Internal (not private) so the end-to-end behaviour — fetch, write, cleanup — can be
+    // driven for a single cycle from tests without spinning the interval loop.
+    internal async Task RunStorageCycleAsync(CancellationToken ct)
     {
         _logger.LogInformation(
             "Weather file storage cycle started at {Time}. Output path: {OutputPath}",
@@ -106,7 +108,7 @@ public class WeatherFileStorageJob : BackgroundService
                     };
 
                     var json = JsonSerializer.Serialize(record, JsonOptions);
-                    await File.WriteAllTextAsync(filePath, json, ct);
+                    await WriteFileAtomicAsync(filePath, json, ct);
 
                     _logger.LogDebug("Written {FilePath}", filePath);
                 }
@@ -125,6 +127,45 @@ public class WeatherFileStorageJob : BackgroundService
             "Weather file storage cycle completed at {Time}", DateTimeOffset.UtcNow);
 
         CleanupOldFiles();
+    }
+
+    /// <summary>
+    /// Writes <paramref name="json"/> to <paramref name="filePath"/> atomically: the content is
+    /// first written to a temporary file in the same directory and then renamed over the
+    /// destination. Because rename is atomic on the same filesystem, a concurrent reader (e.g. an
+    /// agent consuming the JSON) always observes either the previous complete file or the new
+    /// complete file — never a truncated document.
+    /// </summary>
+    private static async Task WriteFileAtomicAsync(string filePath, string json, CancellationToken ct)
+    {
+        var directory = Path.GetDirectoryName(filePath)!;
+        // Leading dot + .tmp keeps the temp file out of the "*.json" cleanup glob and makes it
+        // easy to spot; the GUID avoids collisions between overlapping writes.
+        var tmpPath = Path.Combine(directory, $".{Guid.NewGuid():N}.tmp");
+
+        try
+        {
+            await File.WriteAllTextAsync(tmpPath, json, ct);
+            File.Move(tmpPath, filePath, overwrite: true);
+        }
+        catch
+        {
+            TryDeleteTempFile(tmpPath);
+            throw;
+        }
+    }
+
+    private static void TryDeleteTempFile(string tmpPath)
+    {
+        try
+        {
+            if (File.Exists(tmpPath))
+                File.Delete(tmpPath);
+        }
+        catch
+        {
+            // Best-effort cleanup of the temp file; the next cycle overwrites it anyway.
+        }
     }
 
     /// <summary>

@@ -14,6 +14,11 @@ For this second purpose, I generate JSON files with weather data, so that my age
     ```bash
     docker-compose up -d
     ```
+> ℹ️ **Windows users:** the compose file mounts the forecast output with the relative host path
+> `./weather-data:/app/weather-data`, which works on Linux/macOS out of the box. If you prefer a
+> fixed Windows location, replace it with an absolute path in `docker/docker-compose.yml`, e.g.
+> `C:\WeatherData:/app/weather-data`.
+
 Configurable parameters (.env)
 
 | Environment variable | Default | Description |

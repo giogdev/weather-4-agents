@@ -7,6 +7,8 @@ services:
     env_file:
       - .env
     volumes:
-      - C:\WeatherData:/app/weather-data
+      # Relative host path so the compose file works on Linux/macOS out of the box.
+      # Windows users: see the README for how to use an absolute host path instead.
+      - ./weather-data:/app/weather-data
 
     restart: unless-stopped
