@@ -18,7 +18,7 @@ public class WeatherEndpointsTests
     private static DayWeather Day(DateOnly date, double temperatureC) => new()
     {
         Date = date,
-        Provider = new WeatherProvider(FakeWeatherProviderScraper.Name),
+        Provider = new WeatherProvider(FakeWeatherProviderScraper.Name) { TimeZoneId = "Europe/Rome" },
         ReliabilityPerc = 85,
         HoursDetails =
         [
@@ -52,12 +52,19 @@ public class WeatherEndpointsTests
         var response = await client.GetAsync("/api/weather/bergamo/forecast/days/2");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var days = JsonNode.Parse(await response.Content.ReadAsStringAsync())!.AsArray();
+        var body = JsonNode.Parse(await response.Content.ReadAsStringAsync())!;
+
+        // The endpoint now returns the same envelope as week/next-24h: no bare domain array,
+        // a freshness stamp, the provider timezone, and the day entries under "forecast".
+        Assert.Equal(Weather4AgentsApiFactory.InitialTime, (DateTimeOffset?)body["lastUpdatedAt"]);
+        Assert.Equal("Europe/Rome", (string?)body["timezone"]);
+        var days = body["forecast"]!.AsArray();
         Assert.Equal(2, days.Count);
         Assert.Equal("2026-05-14", (string?)days[0]!["date"]);
-        Assert.Equal(FakeWeatherProviderScraper.Name, (string?)days[0]!["provider"]!["providerName"]);
         Assert.Equal(85, (int?)days[0]!["reliabilityPerc"]);
         Assert.Equal(18.5, (double?)days[0]!["hoursDetails"]![0]!["temperatureC"]);
+        // The weather type keeps its historical string form (enum serialized as its name).
+        Assert.Equal("Sunny", (string?)days[0]!["hoursDetails"]![0]!["weatherType"]);
         Assert.Equal("2026-05-15", (string?)days[1]!["date"]);
     }
 
@@ -75,10 +82,10 @@ public class WeatherEndpointsTests
         // A trimmed request must not mutate the shared cached forecast: a later full request
         // still sees every day (the single scrape feeds both).
         var trimmed = await client.GetAsync("/api/weather/bergamo/forecast/days/1");
-        Assert.Single(JsonNode.Parse(await trimmed.Content.ReadAsStringAsync())!.AsArray());
+        Assert.Single(JsonNode.Parse(await trimmed.Content.ReadAsStringAsync())!["forecast"]!.AsArray());
 
         var full = await client.GetAsync("/api/weather/bergamo/forecast/days/3");
-        Assert.Equal(3, JsonNode.Parse(await full.Content.ReadAsStringAsync())!.AsArray().Count);
+        Assert.Equal(3, JsonNode.Parse(await full.Content.ReadAsStringAsync())!["forecast"]!.AsArray().Count);
         Assert.Equal(1, factory.Scraper.ScrapeCount);
     }
 
@@ -129,6 +136,29 @@ public class WeatherEndpointsTests
         var response = await client.GetAsync("/api/weather/bergamo/forecast/date/2026-06-01");
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetDayWeather_WhenDateExists_ReturnsDayEnvelope()
+    {
+        await using var factory = new Weather4AgentsApiFactory();
+        factory.Scraper.SetForecast("bergamo", Day(PinnedToday, 18.5));
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync($"/api/weather/bergamo/forecast/date/{PinnedToday:yyyy-MM-dd}");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = JsonNode.Parse(await response.Content.ReadAsStringAsync())!;
+
+        // Same envelope as the other endpoints: no bare domain entity, freshness + timezone,
+        // and the day under "day".
+        Assert.Equal(Weather4AgentsApiFactory.InitialTime, (DateTimeOffset?)body["lastUpdatedAt"]);
+        Assert.Equal("Europe/Rome", (string?)body["timezone"]);
+        var day = body["day"]!;
+        Assert.Equal("2026-05-14", (string?)day["date"]);
+        Assert.Equal(85, (int?)day["reliabilityPerc"]);
+        Assert.Equal(18.5, (double?)day["hoursDetails"]![0]!["temperatureC"]);
+        Assert.Equal("Sunny", (string?)day["hoursDetails"]![0]!["weatherType"]);
     }
 
     [Fact]

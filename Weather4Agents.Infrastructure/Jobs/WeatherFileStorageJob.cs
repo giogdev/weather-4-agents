@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -27,8 +26,11 @@ public class WeatherFileStorageJob : BackgroundService
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) }
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        // WeatherType serializes via its own [JsonConverter], which emits the member name verbatim
+        // (PascalCase). No enum converter is registered here on purpose: one with a camelCase
+        // naming policy would take precedence over the type attribute and lowercase those strings,
+        // breaking the on-disk contract that agents read.
     };
 
     public WeatherFileStorageJob(

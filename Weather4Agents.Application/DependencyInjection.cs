@@ -17,7 +17,7 @@ public static class DependencyInjection
         services.AddScoped<IDispatcher, Dispatcher>();
 
         services.AddScoped<IQueryHandler<GetWeatherForecastQuery, ScrapedForecast>, GetWeatherForecastHandler>();
-        services.AddScoped<IQueryHandler<GetDayWeatherQuery, DayWeather?>, GetDayWeatherHandler>();
+        services.AddScoped<IQueryHandler<GetDayWeatherQuery, DayWeatherResponse?>, GetDayWeatherHandler>();
         services.AddScoped<IQueryHandler<GetWeekForecastQuery, WeekForecastResponse>, GetWeekForecastHandler>();
         services.AddScoped<IQueryHandler<GetNext24HoursForecastQuery, Next24HoursForecastResponse>, GetNext24HoursForecastHandler>();
         services.AddScoped<ICommandHandler<ScrapeAndCacheCommand>, ScrapeAndCacheHandler>();

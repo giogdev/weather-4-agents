@@ -20,7 +20,7 @@ public class Meteo3bWeatherTypeMapper
     //   also matches the plural "piogge" (e.g. "piogge diffuse").
     // - LightRain must precede PartlyCloudy because "nubi sparse con possibili
     //   piogge" contains "nubi sparse", which would otherwise match first.
-    private static readonly (Func<string, bool> Matches, string WeatherType)[] WeatherMappings =
+    private static readonly (Func<string, bool> Matches, WeatherType WeatherType)[] WeatherMappings =
     [
         (d => d.Contains("temporal"),                                                                                                    WeatherType.Thunderstorm),
         (d => d.Contains("grandine"),                                                                                                    WeatherType.Hail),
@@ -42,7 +42,7 @@ public class Meteo3bWeatherTypeMapper
         (d => d.Contains("velature"),                                                                                                    WeatherType.LightClouds),
     ];
 
-    public string Map(string description)
+    public WeatherType Map(string description)
     {
         var d = description.ToLowerInvariant();
         foreach (var (matches, weatherType) in WeatherMappings)

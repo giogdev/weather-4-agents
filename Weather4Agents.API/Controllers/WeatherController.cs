@@ -10,7 +10,6 @@ using Weather4Agents.Application.UseCases.GetDayWeather;
 using Weather4Agents.Application.UseCases.GetNext24HoursForecast;
 using Weather4Agents.Application.UseCases.GetWeatherForecast;
 using Weather4Agents.Application.UseCases.GetWeekForecast;
-using Weather4Agents.Domain.Entities;
 using Weather4Agents.Domain.ValueObjects;
 
 namespace Weather4Agents.API.Controllers;
@@ -39,7 +38,7 @@ public class WeatherController : ControllerBase
     /// <param name="provider">Optional provider name. If omitted, the default provider is used.</param>
     /// <param name="ct"></param>
     [HttpGet("{location}/forecast/days/{numberOfDays}")]
-    [ProducesResponseType<IEnumerable<DayWeather>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ForecastResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
@@ -51,7 +50,7 @@ public class WeatherController : ControllerBase
         CancellationToken ct)
     {
         var result = await _dispatcher.SendAsync(new GetWeatherForecastQuery(location, provider, numberOfDays), ct);
-        return Ok(result.Days);
+        return Ok(ForecastResponse.From(result));
     }
 
     /// <summary>
@@ -61,7 +60,7 @@ public class WeatherController : ControllerBase
     /// <param name="provider">Optional provider name. If omitted, the default provider is used.</param>
     /// <param name="ct"></param>
     [HttpGet("{location}/forecast/week")]
-    [ProducesResponseType<IEnumerable<DayWeather>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<WeekForecastResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
@@ -104,7 +103,7 @@ public class WeatherController : ControllerBase
     /// <param name="provider">Optional provider name. If omitted, the default provider is used.</param>
     /// <param name="ct"></param>
     [HttpGet("{location}/forecast/date/{date}")]
-    [ProducesResponseType<DayWeather>(StatusCodes.Status200OK)]
+    [ProducesResponseType<DayWeatherResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]

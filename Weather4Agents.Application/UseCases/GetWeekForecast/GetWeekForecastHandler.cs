@@ -30,12 +30,7 @@ public class GetWeekForecastHandler : IQueryHandler<GetWeekForecastQuery, WeekFo
             .Where(d => d.Date >= today)
             .OrderBy(d => d.Date)
             .Take(7)
-            .Select(d => new DayForecastEntry
-            {
-                Date = d.Date,
-                ReliabilityPerc = d.ReliabilityPerc,
-                HoursDetails = d.HoursDetails
-            });
+            .Select(DayForecastEntry.From);
 
         return new WeekForecastResponse
         {

@@ -25,4 +25,12 @@ public class DayForecastEntry
     /// </summary>
     public int ReliabilityPerc { get; set; } = 100;
     public IEnumerable<HoursWeatherDetails> HoursDetails { get; set; } = [];
+
+    /// <summary>Projects a domain <see cref="DayWeather"/> onto the wire entry.</summary>
+    public static DayForecastEntry From(DayWeather day) => new()
+    {
+        Date = day.Date,
+        ReliabilityPerc = day.ReliabilityPerc,
+        HoursDetails = day.HoursDetails
+    };
 }
