@@ -1,5 +1,8 @@
 using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
+using Weather4Agents.API.Filters;
+using Weather4Agents.API.Settings;
 using Weather4Agents.API.Validation;
 using Weather4Agents.Application.CQRS;
 using Weather4Agents.Application.DTOs;
@@ -17,6 +20,8 @@ namespace Weather4Agents.API.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/weather")]
+[EnableRateLimiting(RateLimitingSettings.PolicyName)]
+[ServiceFilter(typeof(ServableLocationFilter))]
 public class WeatherController : ControllerBase
 {
     private readonly IDispatcher _dispatcher;
@@ -37,6 +42,8 @@ public class WeatherController : ControllerBase
     [ProducesResponseType<IEnumerable<DayWeather>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> GetForecastByDays(
         [ValidLocation] string location,
         [Range(1, ForecastLimits.MaxDays)] int numberOfDays,
@@ -57,6 +64,8 @@ public class WeatherController : ControllerBase
     [ProducesResponseType<IEnumerable<DayWeather>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> GetWeekForecast(
         [ValidLocation] string location,
         [FromQuery] string? provider,
@@ -76,6 +85,8 @@ public class WeatherController : ControllerBase
     [ProducesResponseType<Next24HoursForecastResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> GetNext24HoursForecast(
         [ValidLocation] string location,
         [FromQuery] string? provider,
@@ -96,6 +107,8 @@ public class WeatherController : ControllerBase
     [ProducesResponseType<DayWeather>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> GetDayWeather(
         [ValidLocation] string location,
         DateOnly date,
