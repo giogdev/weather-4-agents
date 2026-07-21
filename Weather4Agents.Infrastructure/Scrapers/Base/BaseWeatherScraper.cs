@@ -2,6 +2,7 @@ using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using Weather4Agents.Application.Interfaces.Scrapers;
 using Weather4Agents.Domain.Entities;
+using Weather4Agents.Domain.ValueObjects;
 
 namespace Weather4Agents.Infrastructure.Scrapers.Base;
 
@@ -31,6 +32,8 @@ public abstract class BaseWeatherScraper : IWeatherProviderScraper
 
     public abstract TimeZoneInfo TimeZone { get; }
 
+    /// <param name="location">Canonical location spelling (see <see cref="LocationName.Normalize"/>).</param>
+    /// <param name="ct">Cancellation token.</param>
     protected abstract Task<IEnumerable<DayWeather>> ScrapeAsync(string location, CancellationToken ct);
 
     public async Task<IEnumerable<DayWeather>> GetForecastAsync(
@@ -38,11 +41,14 @@ public abstract class BaseWeatherScraper : IWeatherProviderScraper
         bool forceRefresh = false,
         CancellationToken ct = default)
     {
-        var cacheKey = $"{ProviderName.ToLowerInvariant()}:{location.ToLowerInvariant()}";
+        // One canonical spelling feeds both the cache key and the scrape, so "San Pellegrino
+        // Terme" and "san-pellegrino-terme" share a single cache entry and a single scrape.
+        var normalizedLocation = LocationName.Normalize(location);
+        var cacheKey = $"{ProviderName.ToLowerInvariant()}:{normalizedLocation}";
 
         if (forceRefresh)
         {
-            var fresh = (await ScrapeAsync(location, ct)).ToList();
+            var fresh = (await ScrapeAsync(normalizedLocation, ct)).ToList();
             await _hybridCache.SetAsync(cacheKey, fresh, OptionsFor(fresh), cancellationToken: ct);
             return fresh;
         }
@@ -56,7 +62,7 @@ public abstract class BaseWeatherScraper : IWeatherProviderScraper
             async innerCt =>
             {
                 created = true;
-                return (await ScrapeAsync(location, innerCt)).ToList();
+                return (await ScrapeAsync(normalizedLocation, innerCt)).ToList();
             },
             NegativeCacheOptions,
             cancellationToken: ct)).ToList();

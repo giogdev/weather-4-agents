@@ -1,43 +1,58 @@
-using Weather4Agents.Application.Interfaces.Scrapers;
+using Microsoft.Extensions.Caching.Hybrid;
+using Microsoft.Extensions.Logging.Abstractions;
 using Weather4Agents.Domain.Entities;
+using Weather4Agents.Domain.ValueObjects;
+using Weather4Agents.Infrastructure.Scrapers.Base;
 
 namespace Weather4Agents.Test.Integration;
 
 /// <summary>
-/// In-memory <see cref="IWeatherProviderScraper"/> for integration tests.
-/// Each test configures the forecasts it needs via <see cref="SetForecast"/>;
-/// any unconfigured location yields an empty result (simulating an empty scrape).
+/// In-memory scraper for integration tests. It extends <see cref="BaseWeatherScraper"/> so
+/// requests flow through the real caching and location-normalization pipeline; only the
+/// outbound HTTP scrape is replaced. Each test configures the forecasts it needs via
+/// <see cref="SetForecast"/>; any unconfigured location yields an empty result (simulating an
+/// empty scrape). <see cref="ScrapeCount"/> exposes how many scrapes actually happened, letting
+/// tests distinguish cache hits from fresh scrapes.
 /// </summary>
-public class FakeWeatherProviderScraper : IWeatherProviderScraper
+public class FakeWeatherProviderScraper : BaseWeatherScraper
 {
     public const string Name = "FakeProvider";
 
-    private readonly Dictionary<string, IReadOnlyList<DayWeather>> _forecasts =
-        new(StringComparer.OrdinalIgnoreCase);
-
-    private readonly HashSet<string> _failing =
-        new(StringComparer.OrdinalIgnoreCase);
-
-    public string ProviderName => Name;
-
     // Same timezone as the real provider so timezone-sensitive tests exercise the same math.
-    public TimeZoneInfo TimeZone { get; } = TimeZoneInfo.FindSystemTimeZoneById("Europe/Rome");
+    private static readonly TimeZoneInfo ItalianTimeZone =
+        TimeZoneInfo.FindSystemTimeZoneById("Europe/Rome");
 
+    private readonly Dictionary<string, IReadOnlyList<DayWeather>> _forecasts = new();
+
+    private readonly HashSet<string> _failing = new();
+
+    public FakeWeatherProviderScraper(HybridCache hybridCache)
+        : base(new HttpClient(), hybridCache, NullLogger<FakeWeatherProviderScraper>.Instance)
+    {
+    }
+
+    public int ScrapeCount { get; private set; }
+
+    public override string ProviderName => Name;
+
+    public override TimeZoneInfo TimeZone => ItalianTimeZone;
+
+    // Keys are normalized like incoming scrape requests, so tests can configure a location
+    // with any spelling ("San Pellegrino Terme" or "san-pellegrino-terme").
     public void SetForecast(string location, params DayWeather[] days)
-        => _forecasts[location] = days;
+        => _forecasts[LocationName.Normalize(location)] = days;
 
     /// <summary>
-    /// Makes <see cref="GetForecastAsync"/> throw an unexpected exception for the given
-    /// location, simulating an unhandled failure deep in the pipeline.
+    /// Makes the scrape throw an unexpected exception for the given location, simulating an
+    /// unhandled failure deep in the pipeline.
     /// </summary>
     public void FailFor(string location)
-        => _failing.Add(location);
+        => _failing.Add(LocationName.Normalize(location));
 
-    public Task<IEnumerable<DayWeather>> GetForecastAsync(
-        string location,
-        bool forceRefresh = false,
-        CancellationToken ct = default)
+    protected override Task<IEnumerable<DayWeather>> ScrapeAsync(string location, CancellationToken ct)
     {
+        ScrapeCount++;
+
         if (_failing.Contains(location))
             throw new InvalidOperationException($"Simulated scraper failure for '{location}'.");
 

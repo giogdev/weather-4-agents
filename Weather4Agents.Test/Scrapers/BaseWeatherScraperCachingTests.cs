@@ -30,6 +30,8 @@ public class BaseWeatherScraperCachingTests
 
         public int ScrapeCount { get; private set; }
 
+        public string? LastScrapedLocation { get; private set; }
+
         public override string ProviderName => "Counting";
 
         public override TimeZoneInfo TimeZone => TimeZoneInfo.Utc;
@@ -37,6 +39,7 @@ public class BaseWeatherScraperCachingTests
         protected override Task<IEnumerable<DayWeather>> ScrapeAsync(string location, CancellationToken ct)
         {
             ScrapeCount++;
+            LastScrapedLocation = location;
             return Task.FromResult(_factory());
         }
     }
@@ -160,6 +163,24 @@ public class BaseWeatherScraperCachingTests
 
         Assert.Equal(1, scraper.ScrapeCount);
         Assert.NotEmpty(later);
+    }
+
+    // ── Location normalization ───────────────────────────────────────────────────
+
+    [Fact]
+    public async Task GetForecastAsync_SpacedAndHyphenatedSpellings_ShareOneScrapeAndOneCacheEntry()
+    {
+        var (cache, l2) = BuildL2CapturingCache();
+        var scraper = new CountingScraper(cache, () => new[] { AnyDay() });
+
+        await scraper.GetForecastAsync("San Pellegrino Terme");
+        await scraper.GetForecastAsync("san-pellegrino-terme");
+
+        Assert.Equal(1, scraper.ScrapeCount);
+        Assert.Single(l2.LastExpiration);
+        // The provider is handed the same canonical spelling used for the cache key,
+        // so the scraped URL and the cache entry can never diverge.
+        Assert.Equal("san-pellegrino-terme", scraper.LastScrapedLocation);
     }
 
     // ── Exact TTL handed to the cache ────────────────────────────────────────────

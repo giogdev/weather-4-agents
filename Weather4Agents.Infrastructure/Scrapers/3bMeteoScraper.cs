@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using Weather4Agents.Application.Interfaces.Scrapers;
 using Weather4Agents.Domain.Entities;
 using Weather4Agents.Domain.Enums;
+using Weather4Agents.Domain.ValueObjects;
 using Weather4Agents.Infrastructure.Scrapers.Base;
 
 namespace Weather4Agents.Infrastructure.Scrapers;
@@ -52,16 +53,17 @@ public partial class Meteo3bScraper : BaseWeatherScraper
         // Day pages are relative to the provider's (Italian) today, not the host's: on a UTC
         // host the two differ around midnight and every scraped day would be labelled a day off.
         var today = this.GetLocalToday(_timeProvider);
-        var normalizedLocation = location.ToLowerInvariant().Replace(' ', '-');
 
-        // Day 0 = today, days 1–7 = subsequent days
-        for (var dayOffset = 0; dayOffset <= 7; dayOffset++)
+        // The location arrives already in canonical form (lowercase, hyphenated) from
+        // BaseWeatherScraper, which is exactly the spelling 3bmeteo URLs use.
+        // Day 0 = today, the remaining offsets are the subsequent days.
+        for (var dayOffset = 0; dayOffset < ForecastLimits.MaxDays; dayOffset++)
         {
             ct.ThrowIfCancellationRequested();
 
             var url = dayOffset == 0
-                ? $"{BaseUrl}/{normalizedLocation}"
-                : $"{BaseUrl}/{normalizedLocation}/{dayOffset}";
+                ? $"{BaseUrl}/{location}"
+                : $"{BaseUrl}/{location}/{dayOffset}";
 
             try
             {

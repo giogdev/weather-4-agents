@@ -22,7 +22,12 @@ public class Weather4AgentsApiFactory : WebApplicationFactory<Program>
     public static readonly DateTimeOffset InitialTime =
         new(2026, 5, 14, 8, 0, 0, TimeSpan.Zero);
 
-    public FakeWeatherProviderScraper Scraper { get; } = new();
+    /// <summary>
+    /// The fake scraper the API is wired to. Resolved from the host's container because it
+    /// shares the application's <c>HybridCache</c>; accessing it builds the host if needed.
+    /// </summary>
+    public FakeWeatherProviderScraper Scraper =>
+        Services.GetRequiredService<FakeWeatherProviderScraper>();
 
     public FakeTimeProvider Clock { get; } = new(InitialTime);
 
@@ -38,10 +43,13 @@ public class Weather4AgentsApiFactory : WebApplicationFactory<Program>
             // No scraping/file-storage background jobs in tests.
             services.RemoveAll<IHostedService>();
 
-            // Swap the real scraper (and its typed HttpClient) for the fake.
+            // Swap the real scraper (and its typed HttpClient) for the fake, built by the
+            // container so it uses the same HybridCache as the rest of the app.
             services.RemoveAll<IWeatherProviderScraper>();
             services.RemoveAll<Meteo3bScraper>();
-            services.AddSingleton<IWeatherProviderScraper>(Scraper);
+            services.AddSingleton<FakeWeatherProviderScraper>();
+            services.AddSingleton<IWeatherProviderScraper>(
+                sp => sp.GetRequiredService<FakeWeatherProviderScraper>());
 
             // Pin the clock.
             services.RemoveAll<TimeProvider>();
