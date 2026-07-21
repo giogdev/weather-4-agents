@@ -49,6 +49,26 @@ public class SettingsValidationTests
         Assert.Contains(errors, e => e.ErrorMessage!.Contains("WeatherScraping:JobIntervalMinutes"));
     }
 
+    [Fact]
+    public void ScrapingSettings_HttpTimeoutSeconds_DefaultsToFifteen()
+    {
+        Assert.Equal(15, new WeatherScrapingSettings().HttpTimeoutSeconds);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(WeatherScrapingSettings.MaxHttpTimeoutSeconds + 1)]
+    public void ScrapingSettings_WithOutOfRangeHttpTimeout_FailsNamingTheSetting(int seconds)
+    {
+        var settings = ValidScraping();
+        settings.HttpTimeoutSeconds = seconds;
+
+        var errors = Validate(settings);
+
+        Assert.Contains(errors, e => e.ErrorMessage!.Contains("WeatherScraping:HttpTimeoutSeconds"));
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData("   ")]

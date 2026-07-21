@@ -11,6 +11,12 @@ namespace Weather4Agents.Infrastructure;
 
 public static class DependencyInjection
 {
+    // The retry sequence needs a total budget larger than a single attempt, and the circuit
+    // breaker's sampling window must be at least twice the attempt timeout (a handler validation
+    // rule). Both are expressed as multiples of the configured per-attempt timeout.
+    private const int TotalRequestTimeoutMultiplier = 3;
+    private const int CircuitBreakerSamplingMultiplier = 2;
+
     public static IServiceCollection AddInfrastructure(
         this IServiceCollection services,
         IConfiguration configuration)
@@ -26,8 +32,29 @@ public static class DependencyInjection
 
         services.AddSingleton<Meteo3bWeatherTypeMapper>();
 
-        // Typed HTTP clients
-        services.AddHttpClient<Meteo3bScraper>();
+        // Typed HTTP clients. The per-request bound on a hanging page lives in the resilience
+        // handler's attempt timeout, not HttpClient.Timeout: a low client timeout wraps the whole
+        // pipeline and would preempt the retries below. The timeout value is read straight from the
+        // same configuration section that WeatherScrapingSettings binds — an out-of-range value is
+        // rejected by that settings type's ValidateOnStart before the host ever starts. (Coupling
+        // this to IOptions<WeatherScrapingSettings> is deliberately avoided: it would make the two
+        // validated options cross-trigger and turn a clean startup error into an AggregateException.)
+        var httpTimeout = TimeSpan.FromSeconds(
+            configuration
+                .GetSection(WeatherScrapingSettings.SectionName)
+                .GetValue(nameof(WeatherScrapingSettings.HttpTimeoutSeconds),
+                    new WeatherScrapingSettings().HttpTimeoutSeconds));
+
+        services.AddHttpClient<Meteo3bScraper>()
+            .AddStandardResilienceHandler(options =>
+            {
+                // Abandon a hanging request within the configured timeout, per attempt.
+                options.AttemptTimeout.Timeout = httpTimeout;
+                // The total budget caps the whole retry sequence so a persistently slow page
+                // cannot stall the cycle for minutes.
+                options.TotalRequestTimeout.Timeout = httpTimeout * TotalRequestTimeoutMultiplier;
+                options.CircuitBreaker.SamplingDuration = httpTimeout * CircuitBreakerSamplingMultiplier;
+            });
 
         // Register each scraper also as IWeatherProviderScraper for IEnumerable<> resolution
         services.AddTransient<IWeatherProviderScraper>(
