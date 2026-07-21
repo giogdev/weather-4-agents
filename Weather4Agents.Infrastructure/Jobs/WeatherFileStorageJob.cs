@@ -21,6 +21,7 @@ public class WeatherFileStorageJob : BackgroundService
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly WeatherFileStorageSettings _storageSettings;
     private readonly WeatherScrapingSettings _scrapingSettings;
+    private readonly TimeProvider _timeProvider;
     private readonly ILogger<WeatherFileStorageJob> _logger;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -34,11 +35,13 @@ public class WeatherFileStorageJob : BackgroundService
         IServiceScopeFactory scopeFactory,
         IOptions<WeatherFileStorageSettings> storageOptions,
         IOptions<WeatherScrapingSettings> scrapingOptions,
+        TimeProvider timeProvider,
         ILogger<WeatherFileStorageJob> logger)
     {
         _scopeFactory = scopeFactory;
         _storageSettings = storageOptions.Value;
         _scrapingSettings = scrapingOptions.Value;
+        _timeProvider = timeProvider;
         _logger = logger;
     }
 
@@ -65,7 +68,7 @@ public class WeatherFileStorageJob : BackgroundService
     {
         _logger.LogInformation(
             "Weather file storage cycle started at {Time}. Output path: {OutputPath}",
-            DateTimeOffset.UtcNow,
+            _timeProvider.GetUtcNow(),
             _storageSettings.OutputPath);
 
         using var scope = _scopeFactory.CreateScope();
@@ -93,7 +96,7 @@ public class WeatherFileStorageJob : BackgroundService
                 var locationDir = Path.Combine(_storageSettings.OutputPath, location);
                 Directory.CreateDirectory(locationDir);
 
-                var updatedAt = DateTimeOffset.UtcNow;
+                var updatedAt = _timeProvider.GetUtcNow();
 
                 foreach (var day in days)
                 {
@@ -124,7 +127,7 @@ public class WeatherFileStorageJob : BackgroundService
         }
 
         _logger.LogInformation(
-            "Weather file storage cycle completed at {Time}", DateTimeOffset.UtcNow);
+            "Weather file storage cycle completed at {Time}", _timeProvider.GetUtcNow());
 
         CleanupOldFiles();
     }
@@ -181,8 +184,11 @@ public class WeatherFileStorageJob : BackgroundService
         if (!Directory.Exists(_storageSettings.OutputPath))
             return;
 
-        // Files dated before this cutoff are deleted (strictly more than 1 day old).
-        var cutoff = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-1);
+        // Files dated before this cutoff are deleted (strictly more than 1 day old). Filenames
+        // carry provider-local dates while the cutoff is UTC-based; the one-day slack means a
+        // UTC/provider timezone mismatch around midnight only delays a deletion, never loses a
+        // current file.
+        var cutoff = DateOnly.FromDateTime(_timeProvider.GetUtcNow().UtcDateTime).AddDays(-1);
 
         _logger.LogInformation(
             "Cleaning up weather files older than {CutoffDate} (UTC).", cutoff);

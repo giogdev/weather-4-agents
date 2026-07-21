@@ -3,6 +3,7 @@ using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Weather4Agents.Infrastructure.Scrapers;
 
 namespace Weather4Agents.Test.Scrapers;
@@ -73,7 +74,7 @@ public class Meteo3bScraperScrapeTests
         var logger = new CapturingLogger<Meteo3bScraper>();
         var mapper = new Meteo3bWeatherTypeMapper(NullLogger<Meteo3bWeatherTypeMapper>.Instance);
         var httpClient = new HttpClient(new StubHandler(CompleteDayHtml));
-        var scraper = new Meteo3bScraper(httpClient, BuildCache(), mapper, logger);
+        var scraper = new Meteo3bScraper(httpClient, BuildCache(), mapper, TimeProvider.System, logger);
 
         var result = (await scraper.GetForecastAsync("milano", forceRefresh: true)).ToList();
 
@@ -88,7 +89,7 @@ public class Meteo3bScraperScrapeTests
         var logger = new CapturingLogger<Meteo3bScraper>();
         var mapper = new Meteo3bWeatherTypeMapper(NullLogger<Meteo3bWeatherTypeMapper>.Instance);
         var httpClient = new HttpClient(new StubHandler(CompleteDayHtml));
-        var scraper = new Meteo3bScraper(httpClient, BuildCache(), mapper, logger);
+        var scraper = new Meteo3bScraper(httpClient, BuildCache(), mapper, TimeProvider.System, logger);
 
         await scraper.GetForecastAsync("milano", forceRefresh: true);
 
@@ -98,5 +99,23 @@ public class Meteo3bScraperScrapeTests
         Assert.Contains(warnings, w => w.Message.Contains("Timed out") && w.Message.Contains("/milano/1"));
         Assert.Contains(warnings, w => w.Message.Contains("Failed to fetch") && w.Message.Contains("/milano/2"));
         Assert.All(warnings, w => Assert.NotNull(w.Exception));
+    }
+
+    [Fact]
+    public async Task ScrapeAsync_JustPastItalianMidnightOnAUtcHost_DatesDaysFromTheItalianToday()
+    {
+        // 2026-05-14 22:30 UTC = 2026-05-15 00:30 in Italy (CEST): day 0 of the scrape is the
+        // Italian May 15, not the UTC May 14 the host clock would suggest.
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 5, 14, 22, 30, 0, TimeSpan.Zero));
+        var mapper = new Meteo3bWeatherTypeMapper(NullLogger<Meteo3bWeatherTypeMapper>.Instance);
+        var httpClient = new HttpClient(new StubHandler(CompleteDayHtml));
+        var scraper = new Meteo3bScraper(
+            httpClient, BuildCache(), mapper, clock, NullLogger<Meteo3bScraper>.Instance);
+
+        var result = (await scraper.GetForecastAsync("milano", forceRefresh: true)).ToList();
+
+        Assert.Equal(new DateOnly(2026, 5, 15), result.Min(d => d.Date));
+        // The timezone rides along on each day so raw DayWeather responses stay interpretable.
+        Assert.All(result, d => Assert.Equal("Europe/Rome", d.Provider.TimeZoneId));
     }
 }

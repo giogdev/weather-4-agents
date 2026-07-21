@@ -29,6 +29,8 @@ public abstract class BaseWeatherScraper : IWeatherProviderScraper
 
     public abstract string ProviderName { get; }
 
+    public abstract TimeZoneInfo TimeZone { get; }
+
     protected abstract Task<IEnumerable<DayWeather>> ScrapeAsync(string location, CancellationToken ct);
 
     public async Task<IEnumerable<DayWeather>> GetForecastAsync(

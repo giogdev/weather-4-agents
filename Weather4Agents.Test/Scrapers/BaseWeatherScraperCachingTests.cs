@@ -32,6 +32,8 @@ public class BaseWeatherScraperCachingTests
 
         public override string ProviderName => "Counting";
 
+        public override TimeZoneInfo TimeZone => TimeZoneInfo.Utc;
+
         protected override Task<IEnumerable<DayWeather>> ScrapeAsync(string location, CancellationToken ct)
         {
             ScrapeCount++;

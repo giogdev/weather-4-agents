@@ -18,5 +18,12 @@ namespace Weather4Agents.Domain.Entities
         /// Name of the provider
         /// </summary>
         public string ProviderName { get; set; }
+
+        /// <summary>
+        /// IANA identifier of the timezone the provider publishes its forecasts in
+        /// (e.g. "Europe/Rome"). All dates and times of the forecast are local to this timezone.
+        /// Null on data cached before the field was introduced.
+        /// </summary>
+        public string? TimeZoneId { get; set; }
     }
 }

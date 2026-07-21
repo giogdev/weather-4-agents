@@ -158,6 +158,7 @@ public sealed class WeatherFileStorageJobTests : IDisposable
             scopeFactory,
             Options.Create(storageSettings),
             Options.Create(scrapingSettings),
+            TimeProvider.System,
             NullLogger<WeatherFileStorageJob>.Instance);
     }
 

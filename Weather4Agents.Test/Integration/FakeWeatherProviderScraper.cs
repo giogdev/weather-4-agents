@@ -20,6 +20,9 @@ public class FakeWeatherProviderScraper : IWeatherProviderScraper
 
     public string ProviderName => Name;
 
+    // Same timezone as the real provider so timezone-sensitive tests exercise the same math.
+    public TimeZoneInfo TimeZone { get; } = TimeZoneInfo.FindSystemTimeZoneById("Europe/Rome");
+
     public void SetForecast(string location, params DayWeather[] days)
         => _forecasts[location] = days;
 

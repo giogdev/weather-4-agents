@@ -8,6 +8,11 @@ public class WeekForecastResponse
     /// UTC Format
     /// </summary>
     public DateTimeOffset LastUpdatedAt { get; set; }
+    /// <summary>
+    /// IANA identifier of the provider's timezone (e.g. "Europe/Rome").
+    /// All dates and times in the forecast are local to this timezone.
+    /// </summary>
+    public string Timezone { get; set; } = string.Empty;
     public IEnumerable<DayForecastEntry> Forecast { get; set; } = [];
 }
 

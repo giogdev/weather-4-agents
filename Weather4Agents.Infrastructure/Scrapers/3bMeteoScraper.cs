@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using HtmlAgilityPack;
 using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
+using Weather4Agents.Application.Interfaces.Scrapers;
 using Weather4Agents.Domain.Entities;
 using Weather4Agents.Domain.Enums;
 using Weather4Agents.Infrastructure.Scrapers.Base;
@@ -21,25 +22,36 @@ public partial class Meteo3bScraper : BaseWeatherScraper
     private const int DegradedPageReliabilityPerc = 20;
 
     private readonly Meteo3bWeatherTypeMapper _weatherTypeMapper;
+    private readonly TimeProvider _timeProvider;
 
     public Meteo3bScraper(
         HttpClient httpClient,
         HybridCache hybridCache,
         Meteo3bWeatherTypeMapper weatherTypeMapper,
+        TimeProvider timeProvider,
         ILogger<Meteo3bScraper> logger)
         : base(httpClient, hybridCache, logger)
     {
         _weatherTypeMapper = weatherTypeMapper;
+        _timeProvider = timeProvider;
         HttpClient.DefaultRequestHeaders.UserAgent.ParseAdd(
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36");
     }
 
+    // 3bmeteo.com publishes all forecasts in Italian local time regardless of the location.
+    private static readonly TimeZoneInfo ItalianTimeZone =
+        TimeZoneInfo.FindSystemTimeZoneById("Europe/Rome");
+
     public override string ProviderName => "3bMeteo";
+
+    public override TimeZoneInfo TimeZone => ItalianTimeZone;
 
     protected override async Task<IEnumerable<DayWeather>> ScrapeAsync(string location, CancellationToken ct)
     {
         var results = new List<DayWeather>();
-        var today = DateOnly.FromDateTime(DateTime.Today);
+        // Day pages are relative to the provider's (Italian) today, not the host's: on a UTC
+        // host the two differ around midnight and every scraped day would be labelled a day off.
+        var today = this.GetLocalToday(_timeProvider);
         var normalizedLocation = location.ToLowerInvariant().Replace(' ', '-');
 
         // Day 0 = today, days 1–7 = subsequent days
@@ -82,7 +94,7 @@ public partial class Meteo3bScraper : BaseWeatherScraper
         var dayWeather = new DayWeather
         {
             Date = date,
-            Provider = new WeatherProvider(ProviderName)
+            Provider = new WeatherProvider(ProviderName) { TimeZoneId = TimeZone.Id }
         };
 
         // The table layout is used for near-future days. It appears either as:
