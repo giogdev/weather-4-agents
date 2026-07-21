@@ -62,6 +62,27 @@ public class WeatherEndpointsTests
     }
 
     [Fact]
+    public async Task GetForecastByDays_DoesNotShrinkTheCachedForecastForLaterCallers()
+    {
+        await using var factory = new Weather4AgentsApiFactory();
+        factory.Scraper.SetForecast(
+            "bergamo",
+            Day(PinnedToday, 18.5),
+            Day(PinnedToday.AddDays(1), 21.0),
+            Day(PinnedToday.AddDays(2), 12.0));
+        using var client = factory.CreateClient();
+
+        // A trimmed request must not mutate the shared cached forecast: a later full request
+        // still sees every day (the single scrape feeds both).
+        var trimmed = await client.GetAsync("/api/weather/bergamo/forecast/days/1");
+        Assert.Single(JsonNode.Parse(await trimmed.Content.ReadAsStringAsync())!.AsArray());
+
+        var full = await client.GetAsync("/api/weather/bergamo/forecast/days/3");
+        Assert.Equal(3, JsonNode.Parse(await full.Content.ReadAsStringAsync())!.AsArray().Count);
+        Assert.Equal(1, factory.Scraper.ScrapeCount);
+    }
+
+    [Fact]
     public async Task GetForecastByDays_WhenScrapeIsEmpty_Returns404Problem()
     {
         await using var factory = new Weather4AgentsApiFactory();

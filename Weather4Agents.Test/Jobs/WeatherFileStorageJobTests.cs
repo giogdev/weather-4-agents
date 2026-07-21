@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Time.Testing;
 using Weather4Agents.Application.CQRS;
 using Weather4Agents.Application.Settings;
 using Weather4Agents.Application.UseCases.GetWeatherForecast;
@@ -69,6 +70,25 @@ public sealed class WeatherFileStorageJobTests : IDisposable
         Assert.Empty(TempFilesIn(Path.Combine(_outputPath, Location)));
     }
 
+    [Fact]
+    public async Task Cycle_StampsFileWithScrapeTime_NotTheMomentTheFileWasWritten()
+    {
+        var date = new DateOnly(2026, 7, 20);
+        // Data scraped ten hours before this cycle runs.
+        var scrapedAt = new DateTimeOffset(2026, 7, 20, 6, 0, 0, TimeSpan.Zero);
+        var cycleTime = scrapedAt.AddHours(10);
+
+        var dispatcher = new FakeDispatcher();
+        dispatcher.SetForecast(Location, scrapedAt, Day(date, temperature: 18.0));
+
+        var job = CreateJob(dispatcher, clock: new FakeTimeProvider(cycleTime));
+
+        await job.RunStorageCycleAsync(CancellationToken.None);
+
+        var record = ReadRecord(Path.Combine(_outputPath, Location, "2026-07-20.json"));
+        Assert.Equal(scrapedAt, record.LastUpdatedAt);
+    }
+
     // -------------------------------------------------------------------------
     // Overwrite
     // -------------------------------------------------------------------------
@@ -132,7 +152,8 @@ public sealed class WeatherFileStorageJobTests : IDisposable
     // Helpers
     // -------------------------------------------------------------------------
 
-    private WeatherFileStorageJob CreateJob(FakeDispatcher dispatcher, bool cleanupEnabled = false)
+    private WeatherFileStorageJob CreateJob(
+        FakeDispatcher dispatcher, bool cleanupEnabled = false, TimeProvider? clock = null)
     {
         var services = new ServiceCollection();
         services.AddSingleton<IDispatcher>(dispatcher);
@@ -158,7 +179,7 @@ public sealed class WeatherFileStorageJobTests : IDisposable
             scopeFactory,
             Options.Create(storageSettings),
             Options.Create(scrapingSettings),
-            TimeProvider.System,
+            clock ?? TimeProvider.System,
             NullLogger<WeatherFileStorageJob>.Instance);
     }
 
@@ -207,20 +228,23 @@ public sealed class WeatherFileStorageJobTests : IDisposable
 /// <summary>Minimal <see cref="IDispatcher"/> returning per-location forecasts for tests.</summary>
 internal sealed class FakeDispatcher : IDispatcher
 {
-    private readonly Dictionary<string, IEnumerable<DayWeather>> _forecasts =
+    private readonly Dictionary<string, ScrapedForecast> _forecasts =
         new(StringComparer.OrdinalIgnoreCase);
 
     public void SetForecast(string location, params DayWeather[] days)
-        => _forecasts[location] = days;
+        => SetForecast(location, DateTimeOffset.UtcNow, days);
+
+    public void SetForecast(string location, DateTimeOffset scrapedAt, params DayWeather[] days)
+        => _forecasts[location] = new ScrapedForecast { ScrapedAt = scrapedAt, Days = [.. days] };
 
     public Task<TResult> SendAsync<TResult>(IQuery<TResult> query, CancellationToken ct = default)
     {
         if (query is GetWeatherForecastQuery forecastQuery)
         {
-            IEnumerable<DayWeather> days = _forecasts.TryGetValue(forecastQuery.Location, out var d)
-                ? d
-                : [];
-            return Task.FromResult((TResult)(object)days);
+            var forecast = _forecasts.TryGetValue(forecastQuery.Location, out var f)
+                ? f
+                : new ScrapedForecast();
+            return Task.FromResult((TResult)(object)forecast);
         }
 
         throw new NotSupportedException($"Unexpected query type {query.GetType().Name}.");

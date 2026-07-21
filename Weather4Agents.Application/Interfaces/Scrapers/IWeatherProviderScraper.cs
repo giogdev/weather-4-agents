@@ -13,7 +13,12 @@ public interface IWeatherProviderScraper
     /// </summary>
     TimeZoneInfo TimeZone { get; }
 
-    Task<IEnumerable<DayWeather>> GetForecastAsync(
+    /// <summary>
+    /// Forecast for <paramref name="location"/>, wrapped with the moment it was scraped.
+    /// A cached result keeps its original <see cref="ScrapedForecast.ScrapedAt"/>; only an
+    /// actual re-scrape (cache miss or <paramref name="forceRefresh"/>) moves it forward.
+    /// </summary>
+    Task<ScrapedForecast> GetForecastAsync(
         string location,
         bool forceRefresh = false,
         CancellationToken ct = default);

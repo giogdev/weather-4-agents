@@ -25,7 +25,7 @@ public class BaseWeatherScraperCachingTests
         private readonly Func<IEnumerable<DayWeather>> _factory;
 
         public CountingScraper(HybridCache cache, Func<IEnumerable<DayWeather>> factory)
-            : base(new HttpClient(), cache, NullLogger<CountingScraper>.Instance)
+            : base(new HttpClient(), cache, TimeProvider.System, NullLogger<CountingScraper>.Instance)
             => _factory = factory;
 
         public int ScrapeCount { get; private set; }
@@ -130,7 +130,7 @@ public class BaseWeatherScraperCachingTests
         var scraper = new CountingScraper(BuildClockDrivenCache(clock), FreshSource(out var source));
 
         var first = await scraper.GetForecastAsync("somewhere");
-        Assert.Empty(first);
+        Assert.Empty(first.Days);
         Assert.Equal(1, scraper.ScrapeCount);
 
         // Within the ~5-minute negative-cache window the empty result is served without re-scraping.
@@ -144,7 +144,7 @@ public class BaseWeatherScraperCachingTests
         var afterExpiry = await scraper.GetForecastAsync("somewhere");
 
         Assert.Equal(2, scraper.ScrapeCount);
-        Assert.NotEmpty(afterExpiry);
+        Assert.NotEmpty(afterExpiry.Days);
     }
 
     [Fact]
@@ -154,7 +154,7 @@ public class BaseWeatherScraperCachingTests
         var scraper = new CountingScraper(BuildClockDrivenCache(clock), () => new[] { AnyDay() });
 
         var first = await scraper.GetForecastAsync("bergamo");
-        Assert.NotEmpty(first);
+        Assert.NotEmpty(first.Days);
         Assert.Equal(1, scraper.ScrapeCount);
 
         // Long past the 5-minute negative window a real forecast is still cached (24h TTL): no re-scrape.
@@ -162,7 +162,7 @@ public class BaseWeatherScraperCachingTests
         var later = await scraper.GetForecastAsync("bergamo");
 
         Assert.Equal(1, scraper.ScrapeCount);
-        Assert.NotEmpty(later);
+        Assert.NotEmpty(later.Days);
     }
 
     // ── Location normalization ───────────────────────────────────────────────────

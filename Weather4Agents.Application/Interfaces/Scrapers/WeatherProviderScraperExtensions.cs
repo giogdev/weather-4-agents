@@ -11,13 +11,13 @@ public static class WeatherProviderScraperExtensions
     /// place the "an empty forecast means the location is unknown → 404" policy lives, so the
     /// query handlers don't each re-implement it.
     /// </summary>
-    public static async Task<List<DayWeather>> GetForecastOrNotFoundAsync(
+    public static async Task<ScrapedForecast> GetForecastOrNotFoundAsync(
         this IWeatherProviderScraper scraper,
         string location,
         CancellationToken ct)
     {
-        var forecast = (await scraper.GetForecastAsync(location, forceRefresh: false, ct)).ToList();
-        if (forecast.Count == 0)
+        var forecast = await scraper.GetForecastAsync(location, forceRefresh: false, ct);
+        if (forecast.Days.Count == 0)
             throw new LocationNotFoundException(location, scraper.ProviderName);
 
         return forecast;

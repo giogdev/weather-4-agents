@@ -76,7 +76,7 @@ public class Meteo3bScraperScrapeTests
         var httpClient = new HttpClient(new StubHandler(CompleteDayHtml));
         var scraper = new Meteo3bScraper(httpClient, BuildCache(), mapper, TimeProvider.System, logger);
 
-        var result = (await scraper.GetForecastAsync("milano", forceRefresh: true)).ToList();
+        var result = (await scraper.GetForecastAsync("milano", forceRefresh: true)).Days;
 
         // Days 0 and 3..7 succeed (6 days); day 1 (timeout) and day 2 (HTTP error) are skipped,
         // proving a timeout on one day does not abort the whole scrape.
@@ -112,7 +112,7 @@ public class Meteo3bScraperScrapeTests
         var scraper = new Meteo3bScraper(
             httpClient, BuildCache(), mapper, clock, NullLogger<Meteo3bScraper>.Instance);
 
-        var result = (await scraper.GetForecastAsync("milano", forceRefresh: true)).ToList();
+        var result = (await scraper.GetForecastAsync("milano", forceRefresh: true)).Days;
 
         Assert.Equal(new DateOnly(2026, 5, 15), result.Min(d => d.Date));
         // The timezone rides along on each day so raw DayWeather responses stay interpretable.

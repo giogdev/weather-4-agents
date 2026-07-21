@@ -26,8 +26,8 @@ public class FakeWeatherProviderScraper : BaseWeatherScraper
 
     private readonly HashSet<string> _failing = new();
 
-    public FakeWeatherProviderScraper(HybridCache hybridCache)
-        : base(new HttpClient(), hybridCache, NullLogger<FakeWeatherProviderScraper>.Instance)
+    public FakeWeatherProviderScraper(HybridCache hybridCache, TimeProvider timeProvider)
+        : base(new HttpClient(), hybridCache, timeProvider, NullLogger<FakeWeatherProviderScraper>.Instance)
     {
     }
 

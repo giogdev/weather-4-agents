@@ -84,7 +84,7 @@ public class WeatherFileStorageJob : BackgroundService
                 var forecast = await dispatcher.SendAsync(
                     new GetWeatherForecastQuery(location, ProviderName: null), ct);
 
-                var days = forecast.ToList();
+                var days = forecast.Days;
 
                 if (days.Count == 0)
                 {
@@ -96,7 +96,9 @@ public class WeatherFileStorageJob : BackgroundService
                 var locationDir = Path.Combine(_storageSettings.OutputPath, location);
                 Directory.CreateDirectory(locationDir);
 
-                var updatedAt = _timeProvider.GetUtcNow();
+                // The freshness stamp is the moment the data was scraped, not the moment this
+                // file is written — a file materialised from hours-old cached data says so.
+                var updatedAt = forecast.ScrapedAt;
 
                 foreach (var day in days)
                 {

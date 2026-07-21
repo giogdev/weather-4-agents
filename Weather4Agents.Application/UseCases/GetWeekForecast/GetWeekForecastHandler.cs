@@ -21,12 +21,12 @@ public class GetWeekForecastHandler : IQueryHandler<GetWeekForecastQuery, WeekFo
             ? _resolver.GetByName(query.ProviderName)
             : _resolver.GetDefault();
 
-        var allDays = await scraper.GetForecastOrNotFoundAsync(query.Location, ct);
+        var scraped = await scraper.GetForecastOrNotFoundAsync(query.Location, ct);
 
         // "Today" in the provider's timezone: around midnight the host-timezone date (e.g. a UTC
         // container) lags the provider's and would resurrect an already-past day.
         var today = scraper.GetLocalToday(_timeProvider);
-        var forecast = allDays
+        var forecast = scraped.Days
             .Where(d => d.Date >= today)
             .OrderBy(d => d.Date)
             .Take(7)
@@ -39,7 +39,7 @@ public class GetWeekForecastHandler : IQueryHandler<GetWeekForecastQuery, WeekFo
 
         return new WeekForecastResponse
         {
-            LastUpdatedAt = _timeProvider.GetUtcNow(),
+            LastUpdatedAt = scraped.ScrapedAt,
             Timezone = scraper.TimeZone.Id,
             Forecast = forecast
         };

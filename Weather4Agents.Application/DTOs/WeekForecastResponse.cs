@@ -5,7 +5,8 @@ namespace Weather4Agents.Application.DTOs;
 public class WeekForecastResponse
 {
     /// <summary>
-    /// UTC Format
+    /// When the underlying data was scraped from the provider (UTC), not when this response was
+    /// produced: a response served from cache reports the original scrape time.
     /// </summary>
     public DateTimeOffset LastUpdatedAt { get; set; }
     /// <summary>

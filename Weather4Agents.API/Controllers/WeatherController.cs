@@ -44,7 +44,7 @@ public class WeatherController : ControllerBase
         CancellationToken ct)
     {
         var result = await _dispatcher.SendAsync(new GetWeatherForecastQuery(location, provider, numberOfDays), ct);
-        return Ok(result);
+        return Ok(result.Days);
     }
 
     /// <summary>

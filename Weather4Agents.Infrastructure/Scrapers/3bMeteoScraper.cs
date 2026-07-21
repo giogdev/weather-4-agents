@@ -23,7 +23,6 @@ public partial class Meteo3bScraper : BaseWeatherScraper
     private const int DegradedPageReliabilityPerc = 20;
 
     private readonly Meteo3bWeatherTypeMapper _weatherTypeMapper;
-    private readonly TimeProvider _timeProvider;
 
     public Meteo3bScraper(
         HttpClient httpClient,
@@ -31,10 +30,9 @@ public partial class Meteo3bScraper : BaseWeatherScraper
         Meteo3bWeatherTypeMapper weatherTypeMapper,
         TimeProvider timeProvider,
         ILogger<Meteo3bScraper> logger)
-        : base(httpClient, hybridCache, logger)
+        : base(httpClient, hybridCache, timeProvider, logger)
     {
         _weatherTypeMapper = weatherTypeMapper;
-        _timeProvider = timeProvider;
         HttpClient.DefaultRequestHeaders.UserAgent.ParseAdd(
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36");
     }
@@ -52,7 +50,7 @@ public partial class Meteo3bScraper : BaseWeatherScraper
         var results = new List<DayWeather>();
         // Day pages are relative to the provider's (Italian) today, not the host's: on a UTC
         // host the two differ around midnight and every scraped day would be labelled a day off.
-        var today = this.GetLocalToday(_timeProvider);
+        var today = this.GetLocalToday(TimeProvider);
 
         // The location arrives already in canonical form (lowercase, hyphenated) from
         // BaseWeatherScraper, which is exactly the spelling 3bmeteo URLs use.

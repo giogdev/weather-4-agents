@@ -19,10 +19,10 @@ public class GetDayWeatherHandler : IQueryHandler<GetDayWeatherQuery, DayWeather
             ? _resolver.GetByName(query.ProviderName)
             : _resolver.GetDefault();
 
-        var forecast = await scraper.GetForecastOrNotFoundAsync(query.Location, ct);
+        var scraped = await scraper.GetForecastOrNotFoundAsync(query.Location, ct);
 
         // A non-empty forecast that simply lacks the requested date returns null; the controller
         // maps that to a 404 for the specific day.
-        return forecast.FirstOrDefault(d => d.Date == query.Date);
+        return scraped.Days.FirstOrDefault(d => d.Date == query.Date);
     }
 }

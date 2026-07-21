@@ -7,4 +7,4 @@ namespace Weather4Agents.Application.UseCases.GetWeatherForecast;
 /// <param name="ProviderName">Optional provider name. If null, the default provider is used.</param>
 /// <param name="Days">Optional number of days to return. If null, all available days are returned.</param>
 public record GetWeatherForecastQuery(string Location, string? ProviderName, int? Days = null)
-    : IQuery<IEnumerable<DayWeather>>;
+    : IQuery<ScrapedForecast>;

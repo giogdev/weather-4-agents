@@ -19,12 +19,18 @@ public abstract class BaseWeatherScraper : IWeatherProviderScraper
 
     protected readonly HttpClient HttpClient;
     protected readonly ILogger Logger;
+    protected readonly TimeProvider TimeProvider;
     private readonly HybridCache _hybridCache;
 
-    protected BaseWeatherScraper(HttpClient httpClient, HybridCache hybridCache, ILogger logger)
+    protected BaseWeatherScraper(
+        HttpClient httpClient,
+        HybridCache hybridCache,
+        TimeProvider timeProvider,
+        ILogger logger)
     {
         HttpClient = httpClient;
         _hybridCache = hybridCache;
+        TimeProvider = timeProvider;
         Logger = logger;
     }
 
@@ -36,7 +42,7 @@ public abstract class BaseWeatherScraper : IWeatherProviderScraper
     /// <param name="ct">Cancellation token.</param>
     protected abstract Task<IEnumerable<DayWeather>> ScrapeAsync(string location, CancellationToken ct);
 
-    public async Task<IEnumerable<DayWeather>> GetForecastAsync(
+    public async Task<ScrapedForecast> GetForecastAsync(
         string location,
         bool forceRefresh = false,
         CancellationToken ct = default)
@@ -48,32 +54,40 @@ public abstract class BaseWeatherScraper : IWeatherProviderScraper
 
         if (forceRefresh)
         {
-            var fresh = (await ScrapeAsync(normalizedLocation, ct)).ToList();
+            var fresh = await ScrapeStampedAsync(normalizedLocation, ct);
             await _hybridCache.SetAsync(cacheKey, fresh, OptionsFor(fresh), cancellationToken: ct);
             return fresh;
         }
 
         // GetOrCreateAsync writes the factory result with a single set of options chosen before the
         // result is known, so default to the short negative-cache TTL and promote a real forecast to
-        // the standard 24h TTL once it has actually been produced by the factory.
+        // the standard 24h TTL once it has actually been produced by the factory. The scrape time is
+        // captured in the cached value, so a later cache hit keeps reporting the original scrape.
         var created = false;
-        var result = (await _hybridCache.GetOrCreateAsync(
+        var result = await _hybridCache.GetOrCreateAsync(
             cacheKey,
             async innerCt =>
             {
                 created = true;
-                return (await ScrapeAsync(normalizedLocation, innerCt)).ToList();
+                return await ScrapeStampedAsync(normalizedLocation, innerCt);
             },
             NegativeCacheOptions,
-            cancellationToken: ct)).ToList();
+            cancellationToken: ct);
 
-        if (created && result.Count > 0)
+        if (created && result.Days.Count > 0)
             await _hybridCache.SetAsync(cacheKey, result, cancellationToken: ct);
 
         return result;
     }
 
+    private async Task<ScrapedForecast> ScrapeStampedAsync(string normalizedLocation, CancellationToken ct)
+        => new()
+        {
+            ScrapedAt = TimeProvider.GetUtcNow(),
+            Days = (await ScrapeAsync(normalizedLocation, ct)).ToList()
+        };
+
     // Empty forecasts get the short negative-cache TTL; a real forecast keeps the default 24h TTL.
-    private static HybridCacheEntryOptions? OptionsFor(IReadOnlyCollection<DayWeather> forecast)
-        => forecast.Count == 0 ? NegativeCacheOptions : null;
+    private static HybridCacheEntryOptions? OptionsFor(ScrapedForecast forecast)
+        => forecast.Days.Count == 0 ? NegativeCacheOptions : null;
 }
