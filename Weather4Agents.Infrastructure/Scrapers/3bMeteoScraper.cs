@@ -241,16 +241,16 @@ public partial class Meteo3bScraper : BaseWeatherScraper
 
         return new HoursWeatherDetails
         {
-            TimeFrom                     = timeFrom,
-            TimeTo                       = timeTo,
-            WeatherType                  = _weatherTypeMapper.Map(description),
-            WeatherTypeDescription       = description,
-            TemperatureC                 = tempC,
-            PrecipitationMm              = precipMm,
-            HumidityPerc                 = humidity,
-            PressionMbar                 = pressureMbar,
-            WindKmh                      = windKmh,
-            WindDirection                = windDir,
+            TimeFrom = timeFrom,
+            TimeTo = timeTo,
+            WeatherType = _weatherTypeMapper.Map(description),
+            WeatherTypeDescription = description,
+            TemperatureC = tempC,
+            PrecipitationMm = precipMm,
+            HumidityPerc = humidity,
+            PressionMbar = pressureMbar,
+            WindKmh = windKmh,
+            WindDirection = windDir,
             PrecipitationProbabilityPerc = precipProb,
         };
     }
@@ -305,10 +305,10 @@ public partial class Meteo3bScraper : BaseWeatherScraper
             if (!int.TryParse(timeMatch.Groups[1].Value, out var hour) || hour is < 0 or > 23) continue;
 
             var timeFrom = new TimeOnly(hour, 0);
-            var timeTo   = timeFrom.AddHours(1);
+            var timeTo = timeFrom.AddHours(1);
 
             // Weather description: col-xs-2-4 holds plain text like "nubi sparse"
-            var descDiv    = row.SelectSingleNode(".//div[contains(@class,'col-xs-2-4')]");
+            var descDiv = row.SelectSingleNode(".//div[contains(@class,'col-xs-2-4')]");
             var description = HtmlEntity.DeEntitize(descDiv?.InnerText ?? string.Empty).Trim();
 
             // Temperature: switchcelsius active span, inner text like "10.7°"
@@ -318,50 +318,54 @@ public partial class Meteo3bScraper : BaseWeatherScraper
             double.TryParse(tempText, NumberStyles.Any, CultureInfo.InvariantCulture, out var tempC);
 
             // Precipitation
-            var precDiv   = row.SelectSingleNode(".//div[contains(@class,'altriDati-precipitazioni')]");
-            var precipMm  = ParsePrecipitation(HtmlEntity.DeEntitize(precDiv?.InnerText ?? string.Empty).Trim());
+            var precDiv = row.SelectSingleNode(".//div[contains(@class,'altriDati-precipitazioni')]");
+            var precipMm = ParsePrecipitation(HtmlEntity.DeEntitize(precDiv?.InnerText ?? string.Empty).Trim());
 
             // Wind: speed from switchkm active span, direction from remaining text
-            var ventoDiv  = row.SelectSingleNode(".//div[contains(@class,'altriDati-venti')]");
-            var kmSpan    = ventoDiv?.SelectSingleNode(
+            var ventoDiv = row.SelectSingleNode(".//div[contains(@class,'altriDati-venti')]");
+            var kmSpan = ventoDiv?.SelectSingleNode(
                 ".//span[contains(@class,'switchkm') and contains(@class,'active')]");
             double.TryParse(
                 HtmlEntity.DeEntitize(kmSpan?.InnerText ?? "0").Trim(),
                 NumberStyles.Any, CultureInfo.InvariantCulture, out var windKmh);
             var ventoText = HtmlEntity.DeEntitize(ventoDiv?.InnerText ?? string.Empty).Trim();
-            var windDir   = ExtractWindDirection(ventoText);
+            var windDir = ExtractWindDirection(ventoText);
 
             // Humidity: "75%" → strip % and parse
-            var humDiv    = row.SelectSingleNode(".//div[contains(@class,'altriDati-umidita')]");
-            var humText   = HtmlEntity.DeEntitize(humDiv?.InnerText ?? string.Empty).Replace("%", "").Trim();
+            var humDiv = row.SelectSingleNode(".//div[contains(@class,'altriDati-umidita')]");
+            var humText = HtmlEntity.DeEntitize(humDiv?.InnerText ?? string.Empty).Replace("%", "").Trim();
             int.TryParse(humText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var humidity);
 
             // Pressure: plain numeric text like "1024.4"
-            var presDiv      = row.SelectSingleNode(".//div[contains(@class,'altriDati-pressione')]");
+            var presDiv = row.SelectSingleNode(".//div[contains(@class,'altriDati-pressione')]");
             var pressureMbar = (int)ParseFirstDouble(HtmlEntity.DeEntitize(presDiv?.InnerText ?? string.Empty));
 
             results.Add(new HoursWeatherDetails
             {
-                TimeFrom               = timeFrom,
-                TimeTo                 = timeTo,
-                WeatherType            = _weatherTypeMapper.Map(description),
+                TimeFrom = timeFrom,
+                TimeTo = timeTo,
+                WeatherType = _weatherTypeMapper.Map(description),
                 WeatherTypeDescription = description,
-                TemperatureC           = tempC,
-                PrecipitationMm        = precipMm,
-                HumidityPerc           = humidity,
-                PressionMbar           = pressureMbar,
-                WindKmh                = windKmh,
-                WindDirection          = windDir,
+                TemperatureC = tempC,
+                PrecipitationMm = precipMm,
+                HumidityPerc = humidity,
+                PressionMbar = pressureMbar,
+                WindKmh = windKmh,
+                WindDirection = windDir,
             });
         }
 
         return [.. results.OrderBy(x => x.TimeFrom)];
     }
 
+    // Whitespace variants (including the non-breaking space 3bmeteo uses) that separate the
+    // tokens inside a wind cell.
+    private static readonly char[] WindTextSeparators = [' ', '\u00A0', '\t', '\n', '\r'];
+
     // Extracts the compass direction from a wind cell text like "6  4  NNE"
     private static string ExtractWindDirection(string ventoText)
     {
-        var parts = ventoText.Split(new char[] { ' ', '\u00A0', '\t', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+        var parts = ventoText.Split(WindTextSeparators, StringSplitOptions.RemoveEmptyEntries);
         return parts.LastOrDefault(p => !double.TryParse(p, NumberStyles.Any, CultureInfo.InvariantCulture, out _))
                ?? string.Empty;
     }

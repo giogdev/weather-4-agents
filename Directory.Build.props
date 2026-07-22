@@ -1,0 +1,41 @@
+<Project>
+
+  <!--
+    Shared build settings for every project in the solution, so the individual .csproj files stay
+    small and uniform. Project-specific settings (SDK, package/project references, UserSecretsId,
+    IsPackable) remain in each .csproj.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+
+    <!-- Recommended analyzer set, with .editorconfig code-style rules enforced at build time.
+         Style rules are kept at "suggestion" severity in .editorconfig so the build stays
+         warning-clean; correctness (CAxxxx) analyzers do the enforcing. -->
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+
+    <!-- XML documentation is generated for every project; 1591 (missing doc comment) is suppressed
+         so internal/test types need not be fully documented. -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+
+    <!--
+      Documented, deliberate analyzer suppressions (solution-wide). Everything else in the
+      "latest-recommended" set stays active; these are the categories judged not worth acting on
+      for this project:
+        1591  — Missing XML doc comment for a publicly visible member (internal/DTO members are
+                self-explanatory; controllers and settings carry the docs that matter).
+        CA1848 — Use LoggerMessage delegates. A source-generated logging layer is disproportionate
+                 for a low-throughput background scraper; the readable ILogger calls are preferred.
+        CA1873 — Guard expensive log-argument evaluation. Same rationale as CA1848; the log
+                 arguments here are cheap (strings, timestamps).
+      Two further categories are suppressed only where they occur, scoped in .editorconfig rather
+      than blanketed here, so they stay active for the rest of the solution:
+        CA1051 (visible instance fields — the scraper base class's inheritance seam) and
+        CA1725 (parameter-name-matches-base — the repo's 'ct' convention), both in Infrastructure.
+    -->
+    <NoWarn>$(NoWarn);1591;CA1848;CA1873</NoWarn>
+  </PropertyGroup>
+
+</Project>

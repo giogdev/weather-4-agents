@@ -11,7 +11,7 @@ public class WeatherFileStorageSettings
     /// as the final step of each scraping cycle (there is no separate storage schedule).
     /// Can be overridden via environment variable <c>WeatherFileStorage__Enabled</c>.
     /// </summary>
-    public bool Enabled { get; set; } = false;
+    public bool Enabled { get; set; }
 
     /// <summary>
     /// Root directory where weather JSON files are written.
@@ -26,5 +26,5 @@ public class WeatherFileStorageSettings
     /// at the end of each storage cycle.
     /// Can be overridden via environment variable <c>WeatherFileStorage__CleanupEnabled</c>.
     /// </summary>
-    public bool CleanupEnabled { get; set; } = false;
+    public bool CleanupEnabled { get; set; }
 }
