@@ -22,4 +22,13 @@ public interface IWeatherProviderScraper
         string location,
         bool forceRefresh = false,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Seeds the cache with a forecast obtained from an external source (e.g. JSON files written on
+    /// a previous run) so it can be served immediately after a restart, without waiting for a
+    /// scrape. The forecast keeps its original <see cref="ScrapedForecast.ScrapedAt"/>, so freshness
+    /// reflects the original scrape; a later cache miss or a forced refresh re-scrapes normally.
+    /// An empty forecast is ignored.
+    /// </summary>
+    Task SeedAsync(string location, ScrapedForecast forecast, CancellationToken ct = default);
 }

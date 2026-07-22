@@ -122,15 +122,14 @@ public class SettingsValidationTests
     }
 
     [Theory]
-    [InlineData(0)]
-    [InlineData(-1)]
-    [InlineData(WeatherFileStorageSettings.MaxJobIntervalMinutes + 1)]
-    public void FileStorageSettings_WithOutOfRangeInterval_FailsNamingTheSetting(int interval)
+    [InlineData("")]
+    [InlineData("   ")]
+    public void FileStorageSettings_WithMissingOutputPath_FailsNamingTheSetting(string outputPath)
     {
-        var settings = new WeatherFileStorageSettings { JobIntervalMinutes = interval };
+        var settings = new WeatherFileStorageSettings { OutputPath = outputPath };
 
         var errors = Validate(settings);
 
-        Assert.Contains(errors, e => e.ErrorMessage!.Contains("WeatherFileStorage:JobIntervalMinutes"));
+        Assert.Contains(errors, e => e.ErrorMessage!.Contains("WeatherFileStorage:OutputPath"));
     }
 }

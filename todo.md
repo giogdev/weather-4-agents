@@ -1,57 +1,46 @@
-# Ticket 14 — DTOs at the API boundary & WeatherType enum (plan items Q2, Q3, part of Q4)
+# Ticket 15 — Background jobs coordination & cache bootstrap (plan items L3, L4)
 
 ## Goal
-Decouple the wire contract from the domain model without changing what existing consumers
-(Home Assistant, agents) parse:
-- the two endpoints that still returned domain entities (multi-day forecast, single-day weather)
-  get response DTOs consistent with the week/next-24h responses (freshness + timezone envelope),
-- `WeatherType` becomes a real enum serialized to the exact same strings as before,
-- the `WeatherProvider` value object stops exposing public mutable setters.
-
-Property renames that would break consumers (e.g. the `PressionMbar` typo) stay deferred per spec.
+- **Option A (per spec):** file storage becomes a *step at the end of each scraping cycle* —
+  one job, one interval, no startup race, no self-triggered scrape.
+- **Cache bootstrap:** on startup, seed the cache from JSON files already on disk so agents get
+  data immediately after a redeploy while fresh scraping proceeds in the background.
+- Bootstrap tolerates missing/corrupt files silently (logged, not fatal).
 
 ## Design
-- **WeatherType enum**: `WeatherTypeEnums.cs` becomes a real `enum` with a type-level
-  `[JsonConverter(typeof(JsonStringEnumConverter<WeatherType>))]`, so every value serializes as
-  its member name verbatim (PascalCase) regardless of the options at the call site. `Unknown` is
-  first so `default(WeatherType)` keeps meaning "Unknown". `HoursWeatherDetails.WeatherType` and
-  `Meteo3bWeatherTypeMapper.Map` switch from `string` to the enum.
-  - The file-storage job dropped its `JsonStringEnumConverter(camelCase)`: with a real enum that
-    converter would have lowercased the strings (options converters outrank the type attribute).
-    The type attribute now owns the format for both API and on-disk JSON.
-- **Response DTOs**: new `ForecastResponse` (multi-day) and `DayWeatherResponse` (single-day),
-  each with `LastUpdatedAt` + `Timezone` + the day entries, mirroring `WeekForecastResponse`.
-  Both are built via static `From(...)` factories; freshness/timezone come from a shared
-  `ForecastEnvelope` so the two entity-derived endpoints report them identically. `DayForecastEntry`
-  gains a `From(DayWeather)` projection (also reused by the week handler).
-  - `GetWeatherForecastQuery` still returns the domain `ScrapedForecast` (the file-storage job
-    needs the full `DayWeather`); the controller maps it to `ForecastResponse`.
-  - `GetDayWeatherQuery`/handler now return `DayWeatherResponse?`.
-  - The controller's `ProducesResponseType` for the week endpoint was corrected from
-    `IEnumerable<DayWeather>` (a domain type in the signature) to `WeekForecastResponse`.
-- **WeatherProvider**: `ProviderName` → `{ get; }`, `TimeZoneId` → `{ get; init; }`. Constructor +
-  object-initializer usages are unaffected; System.Text.Json still round-trips via the constructor.
+1. **New `WeatherFileStore` service** (`Infrastructure/Storage/`) — owns all file IO + cache
+   seeding. Depends only on the two settings, `IWeatherProviderResolver`, `TimeProvider`, logger.
+   - `Enabled` — mirrors `WeatherFileStorageSettings.Enabled`.
+   - `PersistForecastsAsync(ct)` — for each configured location, read the default provider's
+     forecast (from cache, freshly scraped) via the resolver and write one JSON file per day
+     (atomic write, freshness = `ScrapedAt`), then run cleanup. Moved from the old job.
+   - `BootstrapCacheAsync(ct)` — enumerate `{OutputPath}/{location}` dirs, read `*.json` into a
+     `ScrapedForecast` (skipping corrupt/unreadable files), seed the default scraper's cache.
+2. **`IWeatherProviderScraper.SeedAsync(location, forecast, ct)`** — primes the cache from an
+   external source (disk) using the scraper's own key, keeping the key format encapsulated.
+   Empty forecasts are never seeded (that is the negative-cache case). Implemented in
+   `BaseWeatherScraper`; cache-key building extracted into a private `CacheKeyFor` helper.
+3. **`WeatherScrapingJob`** — the single coordinator:
+   - Before the loop: best-effort `BootstrapCacheAsync` (only when storage enabled).
+   - Each cycle: scrape all (location, provider), then — if storage enabled — `PersistForecastsAsync`.
+4. **Remove** the separate `WeatherFileStorageJob` hosted service and the now-dead
+   `WeatherFileStorageSettings.JobIntervalMinutes` (one schedule = the scraping interval).
+   Clean up `appsettings*.json` and the settings-validation test cases that named it.
+5. **DI**: drop `AddHostedService<WeatherFileStorageJob>()`, add `AddTransient<WeatherFileStore>()`.
 
 ## Tests
-- `WeatherTypeSerializationTests` (new): snapshot of every enum value → its historical string, under
-  API web defaults and under camelCase property naming, plus a round-trip and the `Unknown` default.
-- `WeatherEndpointsTests`: multi-day updated to the new envelope (`forecast[]`, `lastUpdatedAt`,
-  `timezone`, `weatherType` == "Sunny"); new single-day success test asserting the day envelope.
+- Rework `WeatherFileStorageJobTests` → `WeatherFileStoreTests`: keep write / stamp / overwrite /
+  cleanup coverage against the store, driving forecasts through a fake default scraper.
+- Add bootstrap tests: happy path (files on disk → cache seeded, served with original scrape
+  time) and corrupt-file scenario (bad file skipped, good files still seeded, no throw).
+- Full suite green at the end. Nothing committed until reviewed.
 
 ## Checklist
-- [x] Snapshot test locks byte-identical weather-type strings
-- [x] `WeatherType` is a real enum (invalid values no longer constructible in code)
-- [x] Response DTOs for the multi-day and single-day endpoints; no domain type in a controller
-      response signature
-- [x] `WeatherProvider` has no public mutable setters
-- [x] Home Assistant integration unaffected (it consumes only `/forecast/week`, whose shape and
-      `weatherType` strings are unchanged)
-- [x] Full suite green (187 passed)
-- [x] Code review (two-axis: standards + spec)
-      - Standards: no documented-standard violations. Timezone divergence + envelope duplication
-        flagged and resolved via the shared `ForecastEnvelope` + `From` factories. Nested
-        `HoursWeatherDetails` on the wire is pre-existing and in-scope-consistent (matches the
-        existing week/next-24h DTOs; property renames deferred per spec).
-      - Spec: all acceptance criteria met; the flagged multi-day/sibling timezone inconsistency is
-        resolved (single source of truth).
+- [ ] `WeatherFileStore` service (persist + bootstrap)
+- [ ] `SeedAsync` on scraper + `CacheKeyFor` helper
+- [ ] `WeatherScrapingJob` coordinates bootstrap + persist; separate job removed
+- [ ] Dead `JobIntervalMinutes` removed; appsettings + settings tests cleaned
+- [ ] Store tests reworked + bootstrap happy-path/corrupt-file tests
+- [ ] Full suite green
+- [ ] Code review
 - [ ] Commit

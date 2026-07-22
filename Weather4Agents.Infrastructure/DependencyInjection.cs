@@ -6,6 +6,7 @@ using Weather4Agents.Application.Settings;
 using Weather4Agents.Infrastructure.Jobs;
 using Weather4Agents.Infrastructure.Resolvers;
 using Weather4Agents.Infrastructure.Scrapers;
+using Weather4Agents.Infrastructure.Storage;
 
 namespace Weather4Agents.Infrastructure;
 
@@ -76,8 +77,11 @@ public static class DependencyInjection
             .ValidateDataAnnotations()
             .ValidateOnStart();
 
+        // File storage is a step of the scraping job (Option A: one schedule), not a separate
+        // hosted service. The store is resolved per scope from within that job.
+        services.AddTransient<WeatherFileStore>();
+
         services.AddHostedService<WeatherScrapingJob>();
-        services.AddHostedService<WeatherFileStorageJob>();
 
         return services;
     }

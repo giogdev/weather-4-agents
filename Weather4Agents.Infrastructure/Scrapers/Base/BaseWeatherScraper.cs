@@ -50,7 +50,7 @@ public abstract class BaseWeatherScraper : IWeatherProviderScraper
         // One canonical spelling feeds both the cache key and the scrape, so "San Pellegrino
         // Terme" and "san-pellegrino-terme" share a single cache entry and a single scrape.
         var normalizedLocation = LocationName.Normalize(location);
-        var cacheKey = $"{ProviderName.ToLowerInvariant()}:{normalizedLocation}";
+        var cacheKey = CacheKeyFor(normalizedLocation);
 
         if (forceRefresh)
         {
@@ -79,6 +79,29 @@ public abstract class BaseWeatherScraper : IWeatherProviderScraper
 
         return result;
     }
+
+    /// <summary>
+    /// Seeds the cache with a forecast obtained from an external source (e.g. JSON files written
+    /// on a previous run) so it can be served immediately, without a scrape. The forecast keeps its
+    /// original <see cref="ScrapedForecast.ScrapedAt"/>, so freshness still reflects the original
+    /// scrape; a later cache miss or <c>forceRefresh</c> re-scrapes normally.
+    /// </summary>
+    public async Task SeedAsync(string location, ScrapedForecast forecast, CancellationToken ct = default)
+    {
+        // Never seed an empty forecast: that would mask a genuine "unknown location" behind stale
+        // emptiness for the full 24h TTL. An empty result belongs in the short negative cache,
+        // reached only via an actual scrape.
+        if (forecast.Days.Count == 0)
+            return;
+
+        var cacheKey = CacheKeyFor(LocationName.Normalize(location));
+        await _hybridCache.SetAsync(cacheKey, forecast, cancellationToken: ct);
+    }
+
+    // Cache key is derived from the provider name and the canonical location spelling, so every
+    // surface that touches the cache (scrape, serve, seed) agrees on the same entry.
+    private string CacheKeyFor(string normalizedLocation)
+        => $"{ProviderName.ToLowerInvariant()}:{normalizedLocation}";
 
     private async Task<ScrapedForecast> ScrapeStampedAsync(string normalizedLocation, CancellationToken ct)
         => new()
