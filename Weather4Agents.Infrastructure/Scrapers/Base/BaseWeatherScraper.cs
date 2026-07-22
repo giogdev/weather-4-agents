@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Weather4Agents.Application.Interfaces.Scrapers;
 using Weather4Agents.Domain.Entities;
 using Weather4Agents.Domain.ValueObjects;
+using Weather4Agents.Infrastructure.Diagnostics;
 
 namespace Weather4Agents.Infrastructure.Scrapers.Base;
 
@@ -21,16 +22,19 @@ public abstract class BaseWeatherScraper : IWeatherProviderScraper
     protected readonly ILogger Logger;
     protected readonly TimeProvider TimeProvider;
     private readonly HybridCache _hybridCache;
+    private readonly WeatherMetrics _metrics;
 
     protected BaseWeatherScraper(
         HttpClient httpClient,
         HybridCache hybridCache,
         TimeProvider timeProvider,
+        WeatherMetrics metrics,
         ILogger logger)
     {
         HttpClient = httpClient;
         _hybridCache = hybridCache;
         TimeProvider = timeProvider;
+        _metrics = metrics;
         Logger = logger;
     }
 
@@ -104,11 +108,32 @@ public abstract class BaseWeatherScraper : IWeatherProviderScraper
         => $"{ProviderName.ToLowerInvariant()}:{normalizedLocation}";
 
     private async Task<ScrapedForecast> ScrapeStampedAsync(string normalizedLocation, CancellationToken ct)
-        => new()
+    {
+        // Stamp the scrape time and measure the scrape with the injected clock so both are
+        // deterministic under a fake TimeProvider. A throwing scrape is counted as a failure
+        // (with its elapsed time) and the exception is rethrown so callers still see it.
+        var scrapedAt = TimeProvider.GetUtcNow();
+        var start = TimeProvider.GetTimestamp();
+
+        List<DayWeather> days;
+        try
         {
-            ScrapedAt = TimeProvider.GetUtcNow(),
-            Days = (await ScrapeAsync(normalizedLocation, ct)).ToList()
-        };
+            days = (await ScrapeAsync(normalizedLocation, ct)).ToList();
+        }
+        catch
+        {
+            _metrics.RecordScrapeFailure(
+                ProviderName, TimeProvider.GetElapsedTime(start).TotalMilliseconds);
+            throw;
+        }
+
+        // An empty result is a successful scrape that found nothing (handled by the negative
+        // cache), not a failure — only a thrown exception counts as a failure.
+        _metrics.RecordScrapeSuccess(
+            ProviderName, TimeProvider.GetElapsedTime(start).TotalMilliseconds);
+
+        return new ScrapedForecast { ScrapedAt = scrapedAt, Days = days };
+    }
 
     // Empty forecasts get the short negative-cache TTL; a real forecast keeps the default 24h TTL.
     private static HybridCacheEntryOptions? OptionsFor(ScrapedForecast forecast)

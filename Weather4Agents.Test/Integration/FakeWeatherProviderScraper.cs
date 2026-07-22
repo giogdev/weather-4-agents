@@ -2,6 +2,7 @@ using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging.Abstractions;
 using Weather4Agents.Domain.Entities;
 using Weather4Agents.Domain.ValueObjects;
+using Weather4Agents.Infrastructure.Diagnostics;
 using Weather4Agents.Infrastructure.Scrapers.Base;
 
 namespace Weather4Agents.Test.Integration;
@@ -26,8 +27,8 @@ public class FakeWeatherProviderScraper : BaseWeatherScraper
 
     private readonly HashSet<string> _failing = new();
 
-    public FakeWeatherProviderScraper(HybridCache hybridCache, TimeProvider timeProvider)
-        : base(new HttpClient(), hybridCache, timeProvider, NullLogger<FakeWeatherProviderScraper>.Instance)
+    public FakeWeatherProviderScraper(HybridCache hybridCache, TimeProvider timeProvider, WeatherMetrics metrics)
+        : base(new HttpClient(), hybridCache, timeProvider, metrics, NullLogger<FakeWeatherProviderScraper>.Instance)
     {
     }
 

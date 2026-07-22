@@ -1,9 +1,19 @@
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS base
 LABEL org.opencontainers.image.title="Weather4Agents" \
       org.opencontainers.image.description="Middleware that enables agents to receive weather information"
+# curl is needed by the HEALTHCHECK below and is not present in the base image; install it as
+# root before dropping to the non-root 'app' user.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
 USER app
 WORKDIR /app
 EXPOSE 8080
+
+# Report container health from the app's own /health endpoint. The start period gives the
+# first scraping cycle time to run before failures count against the container.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS publish
 ARG BUILD_CONFIGURATION=Release

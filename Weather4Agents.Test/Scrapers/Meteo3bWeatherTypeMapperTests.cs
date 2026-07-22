@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Weather4Agents.Domain.Enums;
+using Weather4Agents.Infrastructure.Diagnostics;
 using Weather4Agents.Infrastructure.Scrapers;
 
 namespace Weather4Agents.Test.Scrapers;
@@ -8,7 +9,7 @@ namespace Weather4Agents.Test.Scrapers;
 public class Meteo3bWeatherTypeMapperTests
 {
     private static Meteo3bWeatherTypeMapper CreateMapper() =>
-        new(NullLogger<Meteo3bWeatherTypeMapper>.Instance);
+        new(new WeatherMetrics(), NullLogger<Meteo3bWeatherTypeMapper>.Instance);
 
     // -------------------------------------------------------------------------
     // Plural "piogge" phrases map to rain (was broken by the "pioggere" typo)
@@ -122,7 +123,7 @@ public class Meteo3bWeatherTypeMapperTests
     public void Map_UnknownDescription_ReturnsUnknownAndLogsWarningWithDescription()
     {
         var logger = new CapturingLogger();
-        var mapper = new Meteo3bWeatherTypeMapper(logger);
+        var mapper = new Meteo3bWeatherTypeMapper(new WeatherMetrics(), logger);
 
         var result = mapper.Map("Tempesta di sabbia");
 
@@ -135,7 +136,7 @@ public class Meteo3bWeatherTypeMapperTests
     public void Map_KnownDescription_LogsNoWarning()
     {
         var logger = new CapturingLogger();
-        var mapper = new Meteo3bWeatherTypeMapper(logger);
+        var mapper = new Meteo3bWeatherTypeMapper(new WeatherMetrics(), logger);
 
         mapper.Map("Sereno");
 

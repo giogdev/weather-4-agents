@@ -7,6 +7,7 @@ using Weather4Agents.Application.Interfaces.Scrapers;
 using Weather4Agents.Domain.Entities;
 using Weather4Agents.Domain.Enums;
 using Weather4Agents.Domain.ValueObjects;
+using Weather4Agents.Infrastructure.Diagnostics;
 using Weather4Agents.Infrastructure.Scrapers.Base;
 
 namespace Weather4Agents.Infrastructure.Scrapers;
@@ -29,8 +30,9 @@ public partial class Meteo3bScraper : BaseWeatherScraper
         HybridCache hybridCache,
         Meteo3bWeatherTypeMapper weatherTypeMapper,
         TimeProvider timeProvider,
+        WeatherMetrics metrics,
         ILogger<Meteo3bScraper> logger)
-        : base(httpClient, hybridCache, timeProvider, logger)
+        : base(httpClient, hybridCache, timeProvider, metrics, logger)
     {
         _weatherTypeMapper = weatherTypeMapper;
         HttpClient.DefaultRequestHeaders.UserAgent.ParseAdd(

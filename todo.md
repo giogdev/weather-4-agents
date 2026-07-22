@@ -1,46 +1,63 @@
-# Ticket 15 — Background jobs coordination & cache bootstrap (plan items L3, L4)
+# Ticket 16 — Health checks & basic metrics (plan items L2, L6)
 
 ## Goal
-- **Option A (per spec):** file storage becomes a *step at the end of each scraping cycle* —
-  one job, one interval, no startup race, no self-triggered scrape.
-- **Cache bootstrap:** on startup, seed the cache from JSON files already on disk so agents get
-  data immediately after a redeploy while fresh scraping proceeds in the background.
-- Bootstrap tolerates missing/corrupt files silently (logged, not fatal).
+- **/health** endpoint: liveness + a custom check verifying the last scraping cycle
+  succeeded within a configurable window.
+- **Docker HEALTHCHECK** in the Dockerfile hitting `/health`.
+- **Basic metrics** via `System.Diagnostics.Metrics`: scrape successes/failures, scrape
+  duration, and slots mapped to `Unknown`. Full OpenTelemetry is out of scope.
 
 ## Design
-1. **New `WeatherFileStore` service** (`Infrastructure/Storage/`) — owns all file IO + cache
-   seeding. Depends only on the two settings, `IWeatherProviderResolver`, `TimeProvider`, logger.
-   - `Enabled` — mirrors `WeatherFileStorageSettings.Enabled`.
-   - `PersistForecastsAsync(ct)` — for each configured location, read the default provider's
-     forecast (from cache, freshly scraped) via the resolver and write one JSON file per day
-     (atomic write, freshness = `ScrapedAt`), then run cleanup. Moved from the old job.
-   - `BootstrapCacheAsync(ct)` — enumerate `{OutputPath}/{location}` dirs, read `*.json` into a
-     `ScrapedForecast` (skipping corrupt/unreadable files), seed the default scraper's cache.
-2. **`IWeatherProviderScraper.SeedAsync(location, forecast, ct)`** — primes the cache from an
-   external source (disk) using the scraper's own key, keeping the key format encapsulated.
-   Empty forecasts are never seeded (that is the negative-cache case). Implemented in
-   `BaseWeatherScraper`; cache-key building extracted into a private `CacheKeyFor` helper.
-3. **`WeatherScrapingJob`** — the single coordinator:
-   - Before the loop: best-effort `BootstrapCacheAsync` (only when storage enabled).
-   - Each cycle: scrape all (location, provider), then — if storage enabled — `PersistForecastsAsync`.
-4. **Remove** the separate `WeatherFileStorageJob` hosted service and the now-dead
-   `WeatherFileStorageSettings.JobIntervalMinutes` (one schedule = the scraping interval).
-   Clean up `appsettings*.json` and the settings-validation test cases that named it.
-5. **DI**: drop `AddHostedService<WeatherFileStorageJob>()`, add `AddTransient<WeatherFileStore>()`.
+1. **`WeatherMetrics`** (`Infrastructure/Diagnostics/`) — singleton wrapping one `Meter`
+   (`Weather4Agents`). Instruments:
+   - `weather.scrape.success` (Counter<long>), `weather.scrape.failure` (Counter<long>)
+   - `weather.scrape.duration` (Histogram<double>, ms)
+   - `weather.mapping.unknown` (Counter<long>)
+   Recording seams (truest boundaries, both already exercised by tests):
+   - `BaseWeatherScraper.ScrapeStampedAsync` times the actual scrape (cache miss only) and
+     records success/duration, or failure/duration on exception (rethrown). Empty results
+     count as success — emptiness is the negative-cache concern, not a scrape failure.
+   - `Meteo3bWeatherTypeMapper.Map` records one unknown slot when it falls through to
+     `WeatherType.Unknown`.
+   Duration uses the injected `TimeProvider` (`GetTimestamp`/`GetElapsedTime`) so it is
+   deterministic under the fake clock.
+2. **`ScrapeCycleTracker`** (`Infrastructure/Diagnostics/`) — singleton holding
+   `LastSuccessfulCycleAt` (nullable). `MarkCycleSucceeded()` stamps it via `TimeProvider`.
+   `WeatherScrapingJob` marks it after any cycle with ≥1 successful scrape.
+3. **`HealthCheckSettings`** (`API/Settings/`, like `RateLimitingSettings`) —
+   `MaxScrapeAgeMinutes` (default 120, range 1–1440), validated + `ValidateOnStart`.
+   Documented to exceed `WeatherScraping:JobIntervalMinutes` so the instance is not flagged
+   between normal cycles.
+4. **`ScrapeFreshnessHealthCheck`** (`API/HealthChecks/`, `IHealthCheck`) reads the tracker,
+   settings and `TimeProvider`:
+   - no cycle yet → **Degraded** (starting up; maps to 200)
+   - last success within window → **Healthy** (200)
+   - older than window → **Unhealthy** (503)
+5. **`Program.cs`**: `AddHealthChecks().AddCheck<ScrapeFreshnessHealthCheck>("scrape-freshness")`,
+   bind+validate `HealthCheckSettings`, `MapHealthChecks("/health")`. Not rate-limited (no
+   policy attached to the health endpoint).
+6. **DI**: register `WeatherMetrics` + `ScrapeCycleTracker` singletons; inject metrics into the
+   mapper and `BaseWeatherScraper` (Meteo3b + Fake ctors), tracker into the job.
+7. **Dockerfile**: install `curl` in the base layer (as root, before `USER app`) and add a
+   `HEALTHCHECK` against `http://localhost:8080/health`.
+8. **appsettings.json**: add a `HealthCheck` section.
 
 ## Tests
-- Rework `WeatherFileStorageJobTests` → `WeatherFileStoreTests`: keep write / stamp / overwrite /
-  cleanup coverage against the store, driving forecasts through a fake default scraper.
-- Add bootstrap tests: happy path (files on disk → cache seeded, served with original scrape
-  time) and corrupt-file scenario (bad file skipped, good files still seeded, no throw).
+- Integration (`HealthCheckTests`): healthy (mark cycle succeeded → 200 Healthy), unhealthy
+  (mark succeeded, advance the fake clock past the window → 503 Unhealthy), and no-cycle-yet
+  (→ 200 Degraded).
+- Metrics unit test: mapper records an unknown slot via `MetricCollector`; scrape
+  success/failure counters increment through the fake scraper.
 - Full suite green at the end. Nothing committed until reviewed.
 
 ## Checklist
-- [ ] `WeatherFileStore` service (persist + bootstrap)
-- [ ] `SeedAsync` on scraper + `CacheKeyFor` helper
-- [ ] `WeatherScrapingJob` coordinates bootstrap + persist; separate job removed
-- [ ] Dead `JobIntervalMinutes` removed; appsettings + settings tests cleaned
-- [ ] Store tests reworked + bootstrap happy-path/corrupt-file tests
-- [ ] Full suite green
-- [ ] Code review
-- [ ] Commit
+- [x] `WeatherMetrics` + recording in scraper & mapper
+- [x] `ScrapeCycleTracker` + job marks successful cycles
+- [x] `HealthCheckSettings` + `ScrapeFreshnessHealthCheck` + `/health` mapping
+- [x] Dockerfile HEALTHCHECK (verified end-to-end: container reports healthy, /health → 200 Healthy)
+- [x] appsettings HealthCheck section
+- [x] Health integration tests + metrics test
+- [x] Full suite green (200 tests)
+- [x] Code review (two-axis: standards + spec — no blocking findings; applied IMeterFactory
+      meter-ownership fix)
+- [x] Commit

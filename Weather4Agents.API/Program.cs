@@ -6,6 +6,7 @@ using Microsoft.Extensions.Options;
 using Scalar.AspNetCore;
 using Weather4Agents.API.Errors;
 using Weather4Agents.API.Filters;
+using Weather4Agents.API.HealthChecks;
 using Weather4Agents.API.OpenApi;
 using Weather4Agents.API.Settings;
 using Weather4Agents.Application;
@@ -47,6 +48,17 @@ builder.Services.AddInfrastructure(builder.Configuration);
 
 // System clock; integration tests replace this with a fake to pin time.
 builder.Services.AddSingleton(TimeProvider.System);
+
+// Health checks: /health gives orchestrators a liveness signal plus a custom check that the
+// last scraping cycle succeeded within a configurable window. Its settings are validated on
+// start so a bad window fails fast like the other options.
+builder.Services.AddOptions<HealthCheckSettings>()
+    .Bind(builder.Configuration.GetSection(HealthCheckSettings.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+
+builder.Services.AddHealthChecks()
+    .AddCheck<ScrapeFreshnessHealthCheck>("scrape-freshness");
 
 // Opt-in location whitelist: the filter reads WeatherScraping settings and rejects
 // non-configured locations before the action runs (so before any scrape). Registered as a
@@ -132,6 +144,11 @@ app.MapScalarApiReference(options =>
 //app.UseHttpsRedirection();
 //app.UseAuthorization();
 app.UseRateLimiter();
+
+// Health endpoint is intentionally left off the rate limiter (no policy attached) so probes
+// from Docker/orchestrators are never throttled.
+app.MapHealthChecks("/health");
+
 app.MapControllers();
 
 app.Run();

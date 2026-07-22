@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using Weather4Agents.Application.CQRS;
 using Weather4Agents.Application.Settings;
 using Weather4Agents.Application.UseCases.ScrapeAndCache;
+using Weather4Agents.Infrastructure.Diagnostics;
 using Weather4Agents.Infrastructure.Storage;
 
 namespace Weather4Agents.Infrastructure.Jobs;
@@ -20,15 +21,18 @@ public class WeatherScrapingJob : BackgroundService
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly WeatherScrapingSettings _settings;
+    private readonly ScrapeCycleTracker _cycleTracker;
     private readonly ILogger<WeatherScrapingJob> _logger;
 
     public WeatherScrapingJob(
         IServiceScopeFactory scopeFactory,
         IOptions<WeatherScrapingSettings> options,
+        ScrapeCycleTracker cycleTracker,
         ILogger<WeatherScrapingJob> logger)
     {
         _scopeFactory = scopeFactory;
         _settings = options.Value;
+        _cycleTracker = cycleTracker;
         _logger = logger;
     }
 
@@ -70,6 +74,8 @@ public class WeatherScrapingJob : BackgroundService
         using var scope = _scopeFactory.CreateScope();
         var dispatcher = scope.ServiceProvider.GetRequiredService<IDispatcher>();
 
+        var anySucceeded = false;
+
         foreach (var location in _settings.Locations)
         {
             foreach (var provider in _settings.EnabledProviders)
@@ -77,6 +83,7 @@ public class WeatherScrapingJob : BackgroundService
                 try
                 {
                     await dispatcher.SendAsync(new ScrapeAndCacheCommand(location, provider), ct);
+                    anySucceeded = true;
                     _logger.LogInformation("Scraped {Provider} / {Location}", provider, location);
                 }
                 catch (Exception ex)
@@ -85,6 +92,11 @@ public class WeatherScrapingJob : BackgroundService
                 }
             }
         }
+
+        // Mark the cycle successful only if at least one scrape went through, so the health check
+        // reports fresh data rather than a cycle that failed for every location.
+        if (anySucceeded)
+            _cycleTracker.MarkCycleSucceeded();
 
         _logger.LogInformation("Weather scraping cycle completed at {Time}", DateTimeOffset.UtcNow);
 

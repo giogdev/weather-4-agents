@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Weather4Agents.Domain.Enums;
+using Weather4Agents.Infrastructure.Diagnostics;
 
 namespace Weather4Agents.Infrastructure.Scrapers;
 
@@ -8,10 +9,14 @@ namespace Weather4Agents.Infrastructure.Scrapers;
 /// </summary>
 public class Meteo3bWeatherTypeMapper
 {
-    private readonly ILogger<Meteo3bWeatherTypeMapper> _logger;
+    private const string Provider = "3bMeteo";
 
-    public Meteo3bWeatherTypeMapper(ILogger<Meteo3bWeatherTypeMapper> logger)
+    private readonly ILogger<Meteo3bWeatherTypeMapper> _logger;
+    private readonly WeatherMetrics _metrics;
+
+    public Meteo3bWeatherTypeMapper(WeatherMetrics metrics, ILogger<Meteo3bWeatherTypeMapper> logger)
     {
+        _metrics = metrics;
         _logger = logger;
     }
 
@@ -52,6 +57,7 @@ public class Meteo3bWeatherTypeMapper
         }
 
         _logger.LogWarning("Unknown weather description from 3bMeteo: \"{Description}\"", description);
+        _metrics.RecordUnknownWeatherSlot(Provider);
         return WeatherType.Unknown;
     }
 }

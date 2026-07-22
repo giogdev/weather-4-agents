@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Weather4Agents.Application.Interfaces.Scrapers;
 using Weather4Agents.Application.Settings;
+using Weather4Agents.Infrastructure.Diagnostics;
 using Weather4Agents.Infrastructure.Jobs;
 using Weather4Agents.Infrastructure.Resolvers;
 using Weather4Agents.Infrastructure.Scrapers;
@@ -30,6 +31,13 @@ public static class DependencyInjection
             .Bind(configuration.GetSection(WeatherScrapingSettings.SectionName))
             .ValidateDataAnnotations()
             .ValidateOnStart();
+
+        // Metrics meter and the scrape-cycle tracker are process-wide singletons: the meter emits
+        // to any listener, and the tracker is shared between the writing job and the reading
+        // health check. AddMetrics registers the IMeterFactory that scopes the meter.
+        services.AddMetrics();
+        services.AddSingleton<WeatherMetrics>();
+        services.AddSingleton<ScrapeCycleTracker>();
 
         services.AddSingleton<Meteo3bWeatherTypeMapper>();
 

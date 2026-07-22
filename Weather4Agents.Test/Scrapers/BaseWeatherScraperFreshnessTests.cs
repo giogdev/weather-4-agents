@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Weather4Agents.Domain.Entities;
+using Weather4Agents.Infrastructure.Diagnostics;
 using Weather4Agents.Infrastructure.Scrapers.Base;
 
 namespace Weather4Agents.Test.Scrapers;
@@ -21,7 +22,7 @@ public class BaseWeatherScraperFreshnessTests
     private sealed class StubScraper : BaseWeatherScraper
     {
         public StubScraper(HybridCache cache, TimeProvider timeProvider)
-            : base(new HttpClient(), cache, timeProvider, NullLogger<StubScraper>.Instance)
+            : base(new HttpClient(), cache, timeProvider, new WeatherMetrics(), NullLogger<StubScraper>.Instance)
         {
         }
 

@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Internal;
 using Microsoft.Extensions.Logging.Abstractions;
 using Weather4Agents.Domain.Entities;
+using Weather4Agents.Infrastructure.Diagnostics;
 using Weather4Agents.Infrastructure.Scrapers.Base;
 
 namespace Weather4Agents.Test.Scrapers;
@@ -25,7 +26,7 @@ public class BaseWeatherScraperCachingTests
         private readonly Func<IEnumerable<DayWeather>> _factory;
 
         public CountingScraper(HybridCache cache, Func<IEnumerable<DayWeather>> factory)
-            : base(new HttpClient(), cache, TimeProvider.System, NullLogger<CountingScraper>.Instance)
+            : base(new HttpClient(), cache, TimeProvider.System, new WeatherMetrics(), NullLogger<CountingScraper>.Instance)
             => _factory = factory;
 
         public int ScrapeCount { get; private set; }
