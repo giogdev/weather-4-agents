@@ -6,7 +6,7 @@ namespace Weather4Agents.Application.DTOs;
 /// Response for the single-day forecast endpoint. Wraps the day entry in the same freshness +
 /// timezone envelope as the other forecast endpoints, so no domain entity is exposed on the wire.
 /// </summary>
-public class DayWeatherResponse
+public class DayWeatherResponse : IFreshnessStamped
 {
     /// <summary>
     /// When the underlying data was scraped from the provider (UTC), not when this response was

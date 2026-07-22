@@ -7,7 +7,7 @@ namespace Weather4Agents.Application.DTOs;
 /// two endpoints that used to return the <see cref="DayWeather"/> domain entity directly now expose
 /// the same envelope (freshness + timezone + day entries) as the week/next-24h endpoints.
 /// </summary>
-public class ForecastResponse
+public class ForecastResponse : IFreshnessStamped
 {
     /// <summary>
     /// When the underlying data was scraped from the provider (UTC), not when this response was

@@ -2,7 +2,7 @@ using Weather4Agents.Domain.Entities;
 
 namespace Weather4Agents.Application.DTOs;
 
-public class WeekForecastResponse
+public class WeekForecastResponse : IFreshnessStamped
 {
     /// <summary>
     /// When the underlying data was scraped from the provider (UTC), not when this response was
