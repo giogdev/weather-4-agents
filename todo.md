@@ -1,87 +1,113 @@
-# Ticket 19 — Documentation & repository hygiene
+# Piano: TTL di cache differenziato (oggi 30 min / giorni successivi 12 h)
 
-## Goal
-A new user can start the stack on the first try and integrators can rely on a documented
-contract. Fix README/docker docs, add an API contract page, tidy the redundant settings
-template, document ethical scraping, and add repository hygiene (`.editorconfig`, analyzers,
-uniform project files, CI `dotnet format` + coverage).
+## Obiettivo
+Sostituire l'attuale cache monolitica (una entry per `{provider}:{location}` con TTL unico di 24 h)
+con **due entry a vita indipendente** per località:
 
-Plan items covered: phase 6 (docs & DX), Q5 (repo hygiene), remainder of T3 (CI format + coverage;
-the vulnerable-package check is already wired).
+| Segmento | Contenuto | TTL | Pagine scrapate |
+|---|---|---|---|
+| **today** | solo il giorno corrente (provider-local) | **30 min** | `/{location}` (day offset 0) |
+| **extended** | giorni 1..7 | **12 h** | `/{location}/{1..7}` |
+| negativo (vuoto) | — | 5 min (invariato) | — |
 
-## Acceptance criteria (from the ticket)
-- [ ] Every README link resolves; docker instructions match the real file locations
-- [ ] The API contract page documents timezone, reliability, freshness and error behaviour as implemented
-- [ ] `.editorconfig` and analyzers are active; the solution builds warning-clean or with documented suppressions
-- [ ] CI runs format check and publishes coverage
+Motivazione: presso il provider i dati di oggi si aggiornano ~ogni 30 min, quelli dei giorni
+successivi cambiano lentamente. Poiché **ogni giorno è già una fetch HTTP indipendente**
+([3bMeteoScraper.ScrapeAsync](Weather4Agents.Infrastructure/Scrapers/3bMeteoScraper.cs)), un miss
+sul segmento *today* rifà **1 sola pagina**, non 8 → resta coerente con lo scraping responsabile.
 
-## Findings (current state)
-- README line 9: broken link `docs/job.md` → should be `docs/jobs.md`.
-- README line 64: typo "Yu can consume".
-- README getting-started (lines 11-16) says `docker-compose up -d` / copy `.env.template` but does
-  not mention both files live under `docker/`.
-- README env table lists a stale `WeatherFileStorage__JobIntervalMinutes` (jobs were merged in
-  ticket 15 — there is no separate storage schedule) and omits newer knobs
-  (`AllowUnconfiguredLocations`, `HttpTimeoutSeconds`, `RateLimiting__*`, `HealthCheck__MaxScrapeAgeMinutes`).
-- `docs/jobs.md` still documents a separate `WeatherFileStorageJob` and its `JobIntervalMinutes`
-  that no longer exist (one `WeatherScrapingJob` now does scrape → persist in a single cycle).
-- `docs/docker.md` `docker run` example mounts `/data/weather` while the compose default and
-  container path is `/app/weather-data` — inconsistent.
-- `appsettings.Template.json` is redundant with `appsettings.json` and now stale (missing the
-  `HealthCheck` section, carries the obsolete `WeatherFileStorage:JobIntervalMinutes`). Only
-  reference is the plan doc → safe to remove.
-- `.env.template` carries the obsolete `WeatherFileStorage__JobIntervalMinutes`.
-- No `.editorconfig`; no analyzers enabled; project files diverge (Infrastructure/Test lack
-  `GenerateDocumentationFile`; each production csproj repeats the same property block).
-- CI (`.github/workflows/pipeline.yml`) has the vulnerable-package check but no `dotnet format`
-  verify and no coverage collection/publish.
+## Stato attuale (per riferimento)
+- Una entry `{provider}:{location}` → intero `ScrapedForecast`, TTL 24 h reale / 5 min negativo
+  ([BaseWeatherScraper](Weather4Agents.Infrastructure/Scrapers/Base/BaseWeatherScraper.cs)).
+- Default `AddHybridCache` = 24 h ([DependencyInjection.cs:76-80](Weather4Agents.Infrastructure/DependencyInjection.cs#L76-L80)).
+- Tutti gli handler leggono `GetForecastAsync` e filtrano i giorni → **restano invariati**.
+- Freshness: unico `ScrapedForecast.ScrapedAt`; ETag da `LastUpdatedAt.UtcTicks`.
 
-## Plan
+## Decisione di design sulla freshness (RACCOMANDATA: opzione 1)
+La forecast composta attinge da due scrape con tempi diversi.
+- **Opz. 1 (raccomandata, KISS):** `ScrapedForecast.ScrapedAt = max(ScrapedAt dei segmenti che
+  hanno prodotto giorni)`. Nessuna modifica al dominio. Effetto collaterale minore: un poller su
+  `date/{giorno-futuro}` vede l'ETag ruotare ogni 30 min (quando *today* viene ri-scrapato) anche
+  se quel giorno non è cambiato → qualche `200` in più invece di `304`. Endpoint `today`/`week`
+  invariati e corretti.
+- **Opz. 2 (più precisa, più invasiva):** `ScrapedAt` per-giorno su `DayWeather`; ogni handler
+  calcola `LastUpdatedAt = max` sui giorni effettivamente restituiti. ETag ottimale per ogni
+  endpoint. Tocca `DayWeather` (dominio), tutti i DTO di risposta, `IFreshnessStamped`, e il
+  round-trip su file. Rimandabile a un ticket separato.
 
-### A. Documentation (phase 6)
-1. **README** — fix `docs/job.md` → `docs/jobs.md`; fix "Yu can consume"; clarify that compose +
-   `.env.template` live under `docker/`; correct the env-var table (drop stale storage interval,
-   add the new knobs); link the new API and scraping docs.
-2. **`docs/api.md`** (new) — endpoints, path/query params, `location` rules, `numberOfDays` bounds,
-   timezone semantics (IANA `Timezone` field, all times provider-local), `reliabilityPerc` meaning
-   (day-level 0-100, default 100, degraded pages = 20), freshness (`LastUpdatedAt` = scrape time in
-   UTC, not response time), `ETag`/`Cache-Control`/`304`, and error behaviour (404 unknown location,
-   400 validation, 403 whitelist, 429 rate limit).
-3. **`docs/jobs.md`** — rewrite to the single merged job (bootstrap-from-disk → scrape → persist),
-   remove the phantom `WeatherFileStorageJob` and `WeatherFileStorage:JobIntervalMinutes`.
-4. **`docs/scraping.md`** (new) — ethical/legal note: browser User-Agent choice, honour ToS/robots,
-   recommended minimum `JobIntervalMinutes` toward the provider; link from README.
-5. **`appsettings.Template.json`** — remove (redundant + stale); README/`docs/*` document config.
-6. **`docker/.env.template`** — remove the obsolete `WeatherFileStorage__JobIntervalMinutes`.
-7. **`docs/docker.md`** — align the `docker run` volume/`OutputPath` with `/app/weather-data`.
-8. **CHANGELOG.md** — add a docs & repo-hygiene entry.
+> **DECISO: opzione 1** (max globale, KISS). Nessuna modifica al dominio `DayWeather`.
 
-### B. Repository hygiene (Q5)
-9. **`.editorconfig`** — C# conventions (indentation, `var`, expression-bodied members, `using`
-   ordering, file-scoped namespaces, naming). Style rules kept at `suggestion` severity so the
-   build stays warning-clean; correctness analyzers do the enforcing.
-10. **`Directory.Build.props`** (new, root) — centralise shared properties (`net10.0`, nullable,
-    implicit usings, `AnalysisLevel=latest-recommended`, `EnforceCodeStyleInBuild`,
-    `GenerateDocumentationFile` + `NoWarn 1591`); trim the now-duplicated blocks from each csproj so
-    the project files are uniform. Test project opts out of doc generation.
-11. Build warning-clean; document any unavoidable suppressions in the props/editorconfig.
+## Intervento tecnico
 
-### C. CI (remainder of T3)
-12. **`.github/workflows/pipeline.yml`** — add `dotnet format --verify-no-changes` and collect
-    coverage (`--collect:"XPlat Code Coverage"`), publishing the report as a build artifact.
+### 1. Configurazione (nuove impostazioni)
+- Estendere [WeatherScrapingSettings](Weather4Agents.Application/Settings/WeatherScrapingSettings.cs)
+  con: `TodayCacheMinutes` (default 30, range 1..1440), `ExtendedCacheHours` (default 12,
+  range 1..168), `NegativeCacheMinutes` (default 5, range 1..60). Validazione DataAnnotations.
+- Aggiornare [appsettings.json](Weather4Agents.API/appsettings.json) sezione `WeatherScraping`.
 
-## Verification
-- `dotnet build` warning-clean; `dotnet format --verify-no-changes` passes.
-- Full test suite green (baseline: 205 tests).
-- Every relative link in README/docs resolves to a real file.
-- `/code-review`, then commit.
+### 2. Scraper: scrape per intervallo di giorni
+- Cambiare l'astratto in `BaseWeatherScraper`:
+  `ScrapeAsync(string location, int fromDayOffset, int toDayOffset, CancellationToken ct)`.
+- [3bMeteoScraper](Weather4Agents.Infrastructure/Scrapers/3bMeteoScraper.cs): parametrizzare il
+  loop `dayOffset` con `from..to` (oggi il loop è `0..MaxDays`).
 
-## Checklist
-- [x] A. Docs (README, api.md, jobs.md, scraping.md, template removal, .env.template, docker.md, CHANGELOG)
-- [x] B. .editorconfig + Directory.Build.props + uniform csproj, warning-clean
-- [x] C. CI format check + coverage
-- [x] Build + format + full suite green (205 tests)
-- [x] Code review (two-axis: standards + spec). Applied: stripped BOM from the two csproj files for
-      editorconfig self-consistency; scoped CA1051/CA1725 suppressions to Infrastructure (active
-      elsewhere); added `RateLimiting__QueueLimit` to the README env table. No spec contradictions.
-- [ ] Commit
+### 3. BaseWeatherScraper: due entry + composizione
+- Chiavi: `{provider}:{location}:today` e `{provider}:{location}:extended`
+  (helper `CacheKeyFor(..., segment)`).
+- Iniettare `IOptions<WeatherScrapingSettings>`; costruire `HybridCacheEntryOptions` per today
+  (30 min) ed extended (12 h); mantenere `NegativeCacheOptions` (ora configurabile).
+- Estrarre un helper privato `GetOrScrapeSegmentAsync(cacheKey, from, to, positiveOptions, ...)`
+  che replica il pattern attuale "default negativo → promozione a TTL positivo se `Days>0`"
+  (righe 70-82) una volta per segmento.
+- `GetForecastAsync` compone: `Days = (today.Days ∪ extended.Days).OrderBy(Date)`;
+  `ScrapedAt = max` sui segmenti con giorni (opz. 1).
+- `forceRefresh: true` (usato dal job) rinfresca **entrambi** i segmenti.
+- `SeedAsync` (bootstrap da disco): splittare i giorni letti in today/extended confrontando
+  `d.Date` con `this.GetLocalToday(TimeProvider)`; stampare ciascuna entry con lo stamp da disco.
+
+### 4. DependencyInjection
+- `AddHybridCache` DefaultEntryOptions → allineare a 12 h (fallback; le entry meteo passano sempre
+  opzioni esplicite) — [DependencyInjection.cs:74-81](Weather4Agents.Infrastructure/DependencyInjection.cs#L74).
+
+### 5. Test
+- [BaseWeatherScraperCachingTests](Weather4Agents.Test/Scrapers/BaseWeatherScraperCachingTests.cs):
+  - Ora ci sono **2 entry** → sostituire gli `Assert.Single(l2.LastExpiration)`.
+  - Nuovi assert TTL: today = 30 min, extended = 12 h, vuoto = 5 min.
+  - `CountingScraper`: tracciare gli offset richiesti per verificare la **granularità**
+    (miss di today ⇒ scrape solo offset 0; extended ancora servito da cache).
+  - Nuovo test: scaduto today (30 min) → ri-scrape solo di oggi; extended non ri-scrapato.
+- [Meteo3bScraperScrapeTests](Weather4Agents.Test/Scrapers/Meteo3bScraperScrapeTests.cs):
+  adeguare alla firma `ScrapeAsync(location, from, to, ct)`.
+- Verificare che passino ancora: `DataFreshnessTests`, `ApiConveniencesTests` (ETag/304),
+  `BaseWeatherScraperFreshnessTests`.
+
+## Aggiornamento documentazione
+- [docs/scraping.md](docs/scraping.md) righe 18-32: riscrivere il punto "cached for 24 hours"
+  con la politica differenziata (today 30 min, giorni successivi 12 h, vuoto 5 min) e spiegare che
+  today si auto-rinfresca on-demand fra i cicli del job fetchando una sola pagina.
+- [docs/api.md](docs/api.md) sez. "Freshness" / "Caching & conditional requests": chiarire che
+  `lastUpdatedAt` di oggi è ≤ 30 min, dei giorni successivi ≤ 12 h; nota su rotazione ETag
+  (secondo l'opzione scelta).
+- Verificare [CLAUDE.md](CLAUDE.md) (feature "HybridCache") — eventuale nota sui nuovi setting.
+
+## Fuori scope
+- Opzione 2 (freshness per-giorno) salvo richiesta esplicita.
+- `never commit` — commit solo su richiesta (branch `improvements` autorizzato).
+
+## Esito implementazione
+Raffinamento del design (blocco 3): invece di due scrape indipendenti per segmento, un **miss a
+freddo esegue un unico scrape dell'intera settimana** (offset 0..7) che popola entrambi i segmenti
+con lo stesso `ScrapedAt`; solo alla scadenza autonoma del segmento *today* (30 min) viene
+ri-scrapata **la sola pagina di oggi** (offset 0..0). Questo mantiene "1 richiesta a freddo = 1
+scrape" (contratto intuitivo, meno churn sui test) e un `ScrapedAt` coerente sul percorso comune.
+Alla scadenza del segmento *extended* (12 h) l'intera settimana viene ri-scrapata.
+
+### Checklist
+- [x] Settings (`TodayCacheMinutes`/`ExtendedCacheHours`/`NegativeCacheMinutes`) + appsettings.json
+- [x] `ScrapeAsync` per-intervallo (from..to) in Base + 3bMeteo
+- [x] Doppia entry + composizione + `SeedAsync` split in `BaseWeatherScraper`
+- [x] DI default HybridCache allineato (12 h)
+- [x] Test: unit caching riscritti (granularità today-only, scadenza extended, TTL configurabili) +
+      test-double adeguati (Fake offset-aware, costruttori). Suite verde: **208 test**
+- [x] `dotnet format --verify-no-changes` pulito
+- [x] Docs: scraping.md, api.md (Freshness + 404), README env table, CHANGELOG, docker/.env.template
+- [ ] Commit (solo su richiesta)

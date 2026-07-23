@@ -73,10 +73,13 @@ public static class DependencyInjection
 
         services.AddHybridCache(options =>
         {
+            // Fallback only: weather entries are written with explicit per-segment options by
+            // BaseWeatherScraper (today = short TTL, following days = longer TTL, empty = negative
+            // TTL). This default applies to any hypothetical entry written without options.
             options.DefaultEntryOptions = new HybridCacheEntryOptions
             {
-                Expiration = TimeSpan.FromHours(24),
-                LocalCacheExpiration = TimeSpan.FromHours(24)
+                Expiration = TimeSpan.FromHours(6),
+                LocalCacheExpiration = TimeSpan.FromHours(6)
             };
         });
 

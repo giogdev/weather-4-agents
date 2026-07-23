@@ -3,10 +3,11 @@ using System.Text.RegularExpressions;
 using HtmlAgilityPack;
 using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Weather4Agents.Application.Interfaces.Scrapers;
+using Weather4Agents.Application.Settings;
 using Weather4Agents.Domain.Entities;
 using Weather4Agents.Domain.Enums;
-using Weather4Agents.Domain.ValueObjects;
 using Weather4Agents.Infrastructure.Diagnostics;
 using Weather4Agents.Infrastructure.Scrapers.Base;
 
@@ -31,8 +32,9 @@ public partial class Meteo3bScraper : BaseWeatherScraper
         Meteo3bWeatherTypeMapper weatherTypeMapper,
         TimeProvider timeProvider,
         WeatherMetrics metrics,
+        IOptions<WeatherScrapingSettings> scrapingOptions,
         ILogger<Meteo3bScraper> logger)
-        : base(httpClient, hybridCache, timeProvider, metrics, logger)
+        : base(httpClient, hybridCache, timeProvider, metrics, scrapingOptions, logger)
     {
         _weatherTypeMapper = weatherTypeMapper;
         HttpClient.DefaultRequestHeaders.UserAgent.ParseAdd(
@@ -47,7 +49,8 @@ public partial class Meteo3bScraper : BaseWeatherScraper
 
     public override TimeZoneInfo TimeZone => ItalianTimeZone;
 
-    protected override async Task<IEnumerable<DayWeather>> ScrapeAsync(string location, CancellationToken ct)
+    protected override async Task<IEnumerable<DayWeather>> ScrapeAsync(
+        string location, int fromDayOffset, int toDayOffset, CancellationToken ct)
     {
         var results = new List<DayWeather>();
         // Day pages are relative to the provider's (Italian) today, not the host's: on a UTC
@@ -57,7 +60,7 @@ public partial class Meteo3bScraper : BaseWeatherScraper
         // The location arrives already in canonical form (lowercase, hyphenated) from
         // BaseWeatherScraper, which is exactly the spelling 3bmeteo URLs use.
         // Day 0 = today, the remaining offsets are the subsequent days.
-        for (var dayOffset = 0; dayOffset < ForecastLimits.MaxDays; dayOffset++)
+        for (var dayOffset = fromDayOffset; dayOffset <= toDayOffset; dayOffset++)
         {
             ct.ThrowIfCancellationRequested();
 

@@ -61,6 +61,17 @@ response was produced. A response served from cache reports the original scrape 
 few hours old means the data really is that old — it is a freshness signal, not a response
 timestamp.
 
+The forecast is cached in two segments with different lifetimes, so how stale the data can be
+depends on the day it covers:
+
+- The **current day** is cached for a short time (default 30 minutes), because providers refresh
+  today's data frequently. A response covering today is therefore at most that old.
+- The **following days** are cached longer (default 6 hours), because they change slowly.
+
+`lastUpdatedAt` for a multi-day response is the most recent scrape among the days it returns. As a
+consequence, the current day's `ETag` rotates roughly every 30 minutes, while a request for a single
+future day changes only every 6 hours.
+
 ### Caching & conditional requests
 
 Forecast responses are built for polling agents:
@@ -86,5 +97,5 @@ Errors are returned as [`ProblemDetails`](https://www.rfc-editor.org/rfc/rfc9457
 
 A request for a location the provider does not know (or that returns nothing) yields `404`, not an
 empty `200`. Internally an empty scrape is negative-cached for a short period (5 minutes) rather
-than the normal 24 hours, so a location that becomes valid is picked up on the next request instead
-of being masked for a whole day.
+than the normal forecast lifetimes, so a location that becomes valid is picked up within minutes
+instead of being masked for hours.

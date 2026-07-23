@@ -22,7 +22,8 @@ public class BaseWeatherScraperFreshnessTests
     private sealed class StubScraper : BaseWeatherScraper
     {
         public StubScraper(HybridCache cache, TimeProvider timeProvider)
-            : base(new HttpClient(), cache, timeProvider, new WeatherMetrics(), NullLogger<StubScraper>.Instance)
+            : base(new HttpClient(), cache, timeProvider, new WeatherMetrics(), TestScrapingOptions.Default,
+                NullLogger<StubScraper>.Instance)
         {
         }
 
@@ -32,7 +33,8 @@ public class BaseWeatherScraperFreshnessTests
 
         public override TimeZoneInfo TimeZone => TimeZoneInfo.Utc;
 
-        protected override Task<IEnumerable<DayWeather>> ScrapeAsync(string location, CancellationToken ct)
+        protected override Task<IEnumerable<DayWeather>> ScrapeAsync(
+            string location, int fromDayOffset, int toDayOffset, CancellationToken ct)
         {
             ScrapeCount++;
             return Task.FromResult<IEnumerable<DayWeather>>([AnyDay()]);

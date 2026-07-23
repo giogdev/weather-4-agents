@@ -42,9 +42,13 @@ public sealed class CacheBootstrapTests : IDisposable
     [Fact]
     public async Task Startup_WithFilesOnDisk_ServesFromCacheWithoutScraping()
     {
-        // Data scraped six hours before this "restart".
+        // Data scraped six hours before this "restart" — today plus the following days, one file each.
         var scrapedAt = Weather4AgentsApiFactory.InitialTime.AddHours(-6);
-        WriteFileOnDisk("bergamo", scrapedAt, Day(new DateOnly(2026, 5, 14)));
+        WriteFileOnDisk(
+            "bergamo", scrapedAt,
+            Day(new DateOnly(2026, 5, 14)),
+            Day(new DateOnly(2026, 5, 15)),
+            Day(new DateOnly(2026, 5, 16)));
 
         await using var factory = CreateFactory();
 
@@ -70,7 +74,11 @@ public sealed class CacheBootstrapTests : IDisposable
     public async Task Startup_WithCorruptFileOnDisk_DoesNotThrowAndSeedsTheValidLocation()
     {
         var scrapedAt = Weather4AgentsApiFactory.InitialTime.AddHours(-6);
-        WriteFileOnDisk("bergamo", scrapedAt, Day(new DateOnly(2026, 5, 14)));
+        WriteFileOnDisk(
+            "bergamo", scrapedAt,
+            Day(new DateOnly(2026, 5, 14)),
+            Day(new DateOnly(2026, 5, 15)),
+            Day(new DateOnly(2026, 5, 16)));
 
         // A malformed file for another location must not derail the whole bootstrap.
         var brokenDir = Path.Combine(_outputPath, "brokentown");
@@ -102,14 +110,19 @@ public sealed class CacheBootstrapTests : IDisposable
             builder.UseSetting("WeatherFileStorage:OutputPath", _outputPath);
         });
 
-    private void WriteFileOnDisk(string location, DateTimeOffset scrapedAt, DayWeather day)
+    // Writes one file per day, mirroring a real scraping cycle (today plus following days), so
+    // the bootstrap seeds both cache segments and a later request is served without a scrape.
+    private void WriteFileOnDisk(string location, DateTimeOffset scrapedAt, params DayWeather[] days)
     {
         var locationDir = Path.Combine(_outputPath, location);
         Directory.CreateDirectory(locationDir);
 
-        var record = new DayWeatherFileRecord { LastUpdatedAt = scrapedAt, Weather = day };
-        var json = JsonSerializer.Serialize(record, JsonWriteOptions);
-        File.WriteAllText(Path.Combine(locationDir, $"{day.Date:yyyy-MM-dd}.json"), json);
+        foreach (var day in days)
+        {
+            var record = new DayWeatherFileRecord { LastUpdatedAt = scrapedAt, Weather = day };
+            var json = JsonSerializer.Serialize(record, JsonWriteOptions);
+            File.WriteAllText(Path.Combine(locationDir, $"{day.Date:yyyy-MM-dd}.json"), json);
+        }
     }
 
     private static DayWeather Day(DateOnly date) => new()

@@ -19,10 +19,16 @@ provider asks, and do not use the tool to disguise abusive volume.
 One scraping cycle fetches up to **8 pages per location** (today plus the next seven days), for
 every configured location × enabled provider. To keep that load low:
 
-- The result of each cycle is cached for 24 hours, so API requests are served from cache and do
-  **not** hit the provider on every call.
-- A location that yields nothing is negative-cached for a short period rather than re-fetched
-  immediately.
+- Each location's forecast is cached in **two segments with independent lifetimes**: the current
+  day (`WeatherScraping:TodayCacheMinutes`, default **30 minutes**, because providers refresh
+  today's data frequently) and the following days (`WeatherScraping:ExtendedCacheHours`, default
+  **6 hours**, because they change slowly). API requests are served from cache and do **not** hit
+  the provider on every call.
+- A cold request scrapes the whole week once and populates both segments with a single, consistent
+  scrape time. When only the short-lived current-day entry expires, just that **one page** is
+  re-scraped — not the whole week — so the current day stays fresh cheaply between cycles.
+- A location that yields nothing is negative-cached for a short period
+  (`WeatherScraping:NegativeCacheMinutes`, default 5 minutes) rather than re-fetched immediately.
 - Per-attempt HTTP timeouts and a resilience handler (retry with backoff + circuit breaker) prevent
   a struggling provider from being hammered.
 

@@ -1,9 +1,11 @@
 using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging.Abstractions;
+using Weather4Agents.Application.Interfaces.Scrapers;
 using Weather4Agents.Domain.Entities;
 using Weather4Agents.Domain.ValueObjects;
 using Weather4Agents.Infrastructure.Diagnostics;
 using Weather4Agents.Infrastructure.Scrapers.Base;
+using Weather4Agents.Test.Scrapers;
 
 namespace Weather4Agents.Test.Integration;
 
@@ -28,7 +30,8 @@ public class FakeWeatherProviderScraper : BaseWeatherScraper
     private readonly HashSet<string> _failing = new();
 
     public FakeWeatherProviderScraper(HybridCache hybridCache, TimeProvider timeProvider, WeatherMetrics metrics)
-        : base(new HttpClient(), hybridCache, timeProvider, metrics, NullLogger<FakeWeatherProviderScraper>.Instance)
+        : base(new HttpClient(), hybridCache, timeProvider, metrics, TestScrapingOptions.Default,
+            NullLogger<FakeWeatherProviderScraper>.Instance)
     {
     }
 
@@ -50,14 +53,28 @@ public class FakeWeatherProviderScraper : BaseWeatherScraper
     public void FailFor(string location)
         => _failing.Add(LocationName.Normalize(location));
 
-    protected override Task<IEnumerable<DayWeather>> ScrapeAsync(string location, CancellationToken ct)
+    protected override Task<IEnumerable<DayWeather>> ScrapeAsync(
+        string location, int fromDayOffset, int toDayOffset, CancellationToken ct)
     {
         ScrapeCount++;
 
         if (_failing.Contains(location))
             throw new InvalidOperationException($"Simulated scraper failure for '{location}'.");
 
-        return Task.FromResult<IEnumerable<DayWeather>>(
-            _forecasts.TryGetValue(location, out var days) ? days : []);
+        if (!_forecasts.TryGetValue(location, out var days))
+            return Task.FromResult<IEnumerable<DayWeather>>([]);
+
+        // Return only the days whose offset from the provider-local today falls in the requested
+        // range, mirroring the real scraper (offset 0 = today, one page per day).
+        var today = this.GetLocalToday(TimeProvider);
+        var selected = days
+            .Where(d =>
+            {
+                var offset = d.Date.DayNumber - today.DayNumber;
+                return offset >= fromDayOffset && offset <= toDayOffset;
+            })
+            .ToList();
+
+        return Task.FromResult<IEnumerable<DayWeather>>(selected);
     }
 }

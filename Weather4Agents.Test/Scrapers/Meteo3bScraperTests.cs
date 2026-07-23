@@ -17,7 +17,7 @@ public class Meteo3bScraperTests
         var provider = services.BuildServiceProvider();
         var hybridCache = provider.GetRequiredService<HybridCache>();
         var mapper = new Meteo3bWeatherTypeMapper(new WeatherMetrics(), NullLogger<Meteo3bWeatherTypeMapper>.Instance);
-        return new Meteo3bScraper(new HttpClient(), hybridCache, mapper, TimeProvider.System, new WeatherMetrics(), NullLogger<Meteo3bScraper>.Instance);
+        return new Meteo3bScraper(new HttpClient(), hybridCache, mapper, TimeProvider.System, new WeatherMetrics(), TestScrapingOptions.Default, NullLogger<Meteo3bScraper>.Instance);
     }
 
     // v3 HTML examples

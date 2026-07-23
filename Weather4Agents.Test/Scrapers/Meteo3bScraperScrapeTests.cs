@@ -75,7 +75,7 @@ public class Meteo3bScraperScrapeTests
         var logger = new CapturingLogger<Meteo3bScraper>();
         var mapper = new Meteo3bWeatherTypeMapper(new WeatherMetrics(), NullLogger<Meteo3bWeatherTypeMapper>.Instance);
         var httpClient = new HttpClient(new StubHandler(CompleteDayHtml));
-        var scraper = new Meteo3bScraper(httpClient, BuildCache(), mapper, TimeProvider.System, new WeatherMetrics(), logger);
+        var scraper = new Meteo3bScraper(httpClient, BuildCache(), mapper, TimeProvider.System, new WeatherMetrics(), TestScrapingOptions.Default, logger);
 
         var result = (await scraper.GetForecastAsync("milano", forceRefresh: true)).Days;
 
@@ -90,7 +90,7 @@ public class Meteo3bScraperScrapeTests
         var logger = new CapturingLogger<Meteo3bScraper>();
         var mapper = new Meteo3bWeatherTypeMapper(new WeatherMetrics(), NullLogger<Meteo3bWeatherTypeMapper>.Instance);
         var httpClient = new HttpClient(new StubHandler(CompleteDayHtml));
-        var scraper = new Meteo3bScraper(httpClient, BuildCache(), mapper, TimeProvider.System, new WeatherMetrics(), logger);
+        var scraper = new Meteo3bScraper(httpClient, BuildCache(), mapper, TimeProvider.System, new WeatherMetrics(), TestScrapingOptions.Default, logger);
 
         await scraper.GetForecastAsync("milano", forceRefresh: true);
 
@@ -111,7 +111,7 @@ public class Meteo3bScraperScrapeTests
         var mapper = new Meteo3bWeatherTypeMapper(new WeatherMetrics(), NullLogger<Meteo3bWeatherTypeMapper>.Instance);
         var httpClient = new HttpClient(new StubHandler(CompleteDayHtml));
         var scraper = new Meteo3bScraper(
-            httpClient, BuildCache(), mapper, clock, new WeatherMetrics(), NullLogger<Meteo3bScraper>.Instance);
+            httpClient, BuildCache(), mapper, clock, new WeatherMetrics(), TestScrapingOptions.Default, NullLogger<Meteo3bScraper>.Instance);
 
         var result = (await scraper.GetForecastAsync("milano", forceRefresh: true)).Days;
 

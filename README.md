@@ -34,6 +34,9 @@ Configurable parameters (`docker/.env`)
 | `WeatherScraping__AllowUnconfiguredLocations` | `true` | If `false`, only the configured `Locations` are servable (others get `403`) |
 | `WeatherScraping__JobIntervalMinutes` | `60` | Scraping cycle interval in minutes (1–1440) |
 | `WeatherScraping__HttpTimeoutSeconds` | `15` | Per-attempt HTTP timeout for provider fetches (1–60) |
+| `WeatherScraping__TodayCacheMinutes` | `30` | Cache TTL for the current day's forecast in minutes (1–1440) |
+| `WeatherScraping__ExtendedCacheHours` | `6` | Cache TTL for the following days' forecast in hours (1–168) |
+| `WeatherScraping__NegativeCacheMinutes` | `5` | Cache TTL for an empty scrape (unknown/unreachable location) in minutes (1–60) |
 | `WeatherFileStorage__Enabled` | `false` | Enable/disable writing forecasts to JSON files |
 | `WeatherFileStorage__OutputPath` | `weather-data` | Root directory where JSON files are written |
 | `WeatherFileStorage__CleanupEnabled` | `false` | If `true`, deletes JSON files older than yesterday on each cycle |
