@@ -65,3 +65,6 @@ nunit-*.xml
 .promptops/
 
 .scratch/
+
+# PromptOps session assets
+.promptops-assets/
