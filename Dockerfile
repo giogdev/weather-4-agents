@@ -19,6 +19,10 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0 AS publish
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
 
+# Directory.Build.props supplies solution-wide MSBuild settings (TargetFramework, analyzers, etc.)
+# to every project, so it must be present before restore or the csproj resolves an empty
+# TargetFramework (NETSDK1013).
+COPY ["Directory.Build.props", "./"]
 COPY ["Weather4Agents.API/Weather4Agents.API.csproj", "Weather4Agents.API/"]
 COPY ["Weather4Agents.Application/Weather4Agents.Application.csproj", "Weather4Agents.Application/"]
 COPY ["Weather4Agents.Domain/Weather4Agents.Domain.csproj", "Weather4Agents.Domain/"]
