@@ -16,25 +16,47 @@ jobs:
 
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 8
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
       - name: Restore dependencies
         run: dotnet restore
+      - name: Verify formatting
+        run: dotnet format --verify-no-changes
+      - name: Check for vulnerable packages
+        run: |
+          set -o pipefail
+          dotnet list package --vulnerable --include-transitive | tee vulnerable-packages.txt
+          if grep -qiE '\b(high|critical)\b' vulnerable-packages.txt; then
+            echo "::error::High/critical severity vulnerable package(s) detected (see log above)"
+            exit 1
+          fi
       - name: Build
         run: dotnet build --no-restore
       - name: Test
-        run: dotnet test --no-build --verbosity normal
+        run: >
+          dotnet test --no-build --verbosity normal
+          --collect:"XPlat Code Coverage"
+          --results-directory ./coverage
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: ./coverage/**/coverage.cobertura.xml
+          if-no-files-found: warn
 
   docker:
     runs-on: ubuntu-latest
+    timeout-minutes: 8
     needs: build
     if: github.event_name == 'push'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Extract Docker metadata
         id: meta
@@ -42,11 +64,11 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            # push tag v1.2.3 → genera 1.2.3
+            # push tag v1.2.3 → generates 1.2.3
             type=semver,pattern={{version}}
-            # push su branch → short sha (es. sha-a3f8c2d)
+            # push on branch → short sha (e.g. sha-a3f8c2d)
             type=sha,prefix=sha-,format=short
-            # latest solo sul branch di default (master)
+            # latest only on the default branch (master)
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Set up QEMU

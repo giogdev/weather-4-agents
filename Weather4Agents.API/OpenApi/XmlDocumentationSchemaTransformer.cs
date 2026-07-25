@@ -1,6 +1,7 @@
+using System.Xml;
+using System.Xml.XPath;
 using Microsoft.AspNetCore.OpenApi;
 using Microsoft.OpenApi;
-using System.Xml.XPath;
 
 namespace Weather4Agents.API.OpenApi;
 
@@ -10,7 +11,7 @@ namespace Weather4Agents.API.OpenApi;
 /// </summary>
 internal sealed class XmlDocumentationSchemaTransformer : IOpenApiSchemaTransformer
 {
-    private readonly IReadOnlyList<XPathNavigator> _navigators;
+    private readonly List<XPathNavigator> _navigators;
 
     public XmlDocumentationSchemaTransformer()
     {
@@ -18,12 +19,16 @@ internal sealed class XmlDocumentationSchemaTransformer : IOpenApiSchemaTransfor
 
         _navigators = xmlFiles
             .Where(File.Exists)
-            .Select(path =>
-            {
-                var doc = new XPathDocument(path);
-                return doc.CreateNavigator();
-            })
+            .Select(LoadNavigator)
             .ToList();
+    }
+
+    // Load through an XmlReader (DTD processing prohibited by default) rather than passing the
+    // path straight to XPathDocument, so a crafted doc file cannot trigger DTD/XXE processing.
+    private static XPathNavigator LoadNavigator(string path)
+    {
+        using var reader = XmlReader.Create(path);
+        return new XPathDocument(reader).CreateNavigator();
     }
 
     public Task TransformAsync(OpenApiSchema schema, OpenApiSchemaTransformerContext context, CancellationToken cancellationToken)

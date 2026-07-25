@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from homeassistant.components.weather import (
@@ -44,7 +44,11 @@ async def async_setup_entry(
 
 
 def _map_condition(weather_type: str) -> str:
-    return CONDITION_MAP.get(weather_type, "exceptional")
+    condition = CONDITION_MAP.get(weather_type)
+    if condition is None:
+        _LOGGER.warning("Unknown weatherType '%s' — falling back to 'exceptional'", weather_type)
+        return "exceptional"
+    return condition
 
 
 def _worst_condition(conditions: list[str]) -> str:
@@ -66,6 +70,19 @@ def _slot_datetime_utc(day_str: str, time_from_str: str) -> datetime:
     t = time.fromisoformat(time_from_str)
     local_dt = datetime.combine(d, t, tzinfo=_TZ_ITALY)
     return local_dt.astimezone(timezone.utc)
+
+
+def _slot_end_datetime_utc(day_str: str, slot: HourSlot) -> datetime:
+    """Return the UTC end of a slot, rolling to the next day when timeTo wraps.
+
+    Provider slots such as the evening band 18:00→00:00 (or the last hourly slot
+    23:00→00:00) express their end as midnight of the *following* day.
+    """
+    start = _slot_datetime_utc(day_str, slot.time_from)
+    end = _slot_datetime_utc(day_str, slot.time_to)
+    if end <= start:
+        end += timedelta(days=1)
+    return end
 
 
 def _current_slot(day: DayForecast) -> HourSlot | None:
@@ -207,11 +224,16 @@ class Weather4AgentsEntity(CoordinatorEntity[Weather4AgentsCoordinator], Weather
         return [_build_daily_forecast(day) for day in self.coordinator.data.days]
 
     async def async_forecast_hourly(self) -> list[Forecast]:
-        """Return hourly forecast (one entry per slot, all days)."""
+        """Return hourly forecast (one entry per slot), starting at the current hour."""
         if not self.coordinator.data:
             return []
+        # Drop slots that have already fully elapsed, keeping the slot currently
+        # in progress so the forecast starts at the current hour.
+        now_utc = datetime.now(tz=timezone.utc)
         result: list[Forecast] = []
         for day in self.coordinator.data.days:
             for slot in day.hours_details:
+                if _slot_end_datetime_utc(day.date, slot) <= now_utc:
+                    continue
                 result.append(_build_hourly_forecast(day, slot))
         return result

@@ -1,19 +1,30 @@
+using System.Globalization;
+using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.Options;
 using Scalar.AspNetCore;
+using Weather4Agents.API.Errors;
+using Weather4Agents.API.Filters;
+using Weather4Agents.API.HealthChecks;
 using Weather4Agents.API.OpenApi;
+using Weather4Agents.API.Settings;
 using Weather4Agents.Application;
 using Weather4Agents.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
 
-#if DEBUG
-builder.Configuration.AddJsonFile("appsettings.Development.json", optional: true, reloadOnChange: true);
-#endif
-
-#if RELEASE
-builder.Configuration.AddJsonFile("appsettings.Release.json", optional: true, reloadOnChange: true);
-#endif
+// Environment-specific settings (appsettings.{Environment}.json) are loaded by the host
+// based on ASPNETCORE_ENVIRONMENT; secrets come from User Secrets in Development and
+// environment variables in Production — never from committed files.
 
 builder.Services.AddControllers();
+
+// Central error handling: domain exceptions and unexpected failures are turned into
+// ProblemDetails responses by GlobalExceptionHandler instead of per-controller try/catch.
+builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+
 builder.Services.AddOpenApi(options =>
 {
     options.AddOperationTransformer(new XmlDocumentationTransformer());
@@ -35,13 +46,94 @@ builder.Services.AddOpenApi(options =>
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 
+// System clock; integration tests replace this with a fake to pin time.
+builder.Services.AddSingleton(TimeProvider.System);
+
+// Health checks: /health gives orchestrators a liveness signal plus a custom check that the
+// last scraping cycle succeeded within a configurable window. Its settings are validated on
+// start so a bad window fails fast like the other options.
+builder.Services.AddOptions<HealthCheckSettings>()
+    .Bind(builder.Configuration.GetSection(HealthCheckSettings.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+
+builder.Services.AddHealthChecks()
+    .AddCheck<ScrapeFreshnessHealthCheck>("scrape-freshness");
+
+// Opt-in location whitelist: the filter reads WeatherScraping settings and rejects
+// non-configured locations before the action runs (so before any scrape). Registered as a
+// singleton so the normalized whitelist is built once, not per request; IOptions is singleton
+// too, so this lifetime is safe.
+builder.Services.AddSingleton<ServableLocationFilter>();
+
+// Per-IP fixed-window rate limiting on the weather endpoints. Settings are validated on start;
+// the partitioner reads the validated IOptions instance so there is a single source of truth.
+builder.Services.AddOptions<RateLimitingSettings>()
+    .Bind(builder.Configuration.GetSection(RateLimitingSettings.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    options.AddPolicy(RateLimitingSettings.PolicyName, httpContext =>
+    {
+        var settings = httpContext.RequestServices
+            .GetRequiredService<IOptions<RateLimitingSettings>>().Value;
+
+        // A disabled limiter still needs a policy so the controller attribute resolves;
+        // GetNoLimiter lets every request through.
+        if (!settings.Enabled)
+            return RateLimitPartition.GetNoLimiter("disabled");
+
+        // Partition by client IP. The in-memory test host has no remote IP, so all requests
+        // share a single partition there — which is exactly what the 429 test relies on.
+        var clientKey = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
+        return RateLimitPartition.GetFixedWindowLimiter(clientKey, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = settings.PermitLimit,
+            Window = TimeSpan.FromSeconds(settings.WindowSeconds),
+            QueueLimit = settings.QueueLimit,
+            QueueProcessingOrder = QueueProcessingOrder.OldestFirst
+        });
+    });
+
+    // Reject with a ProblemDetails (consistent with the rest of the API) and advertise Retry-After.
+    options.OnRejected = async (context, cancellationToken) =>
+    {
+        var response = context.HttpContext.Response;
+        response.StatusCode = StatusCodes.Status429TooManyRequests;
+
+        if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
+            response.Headers.RetryAfter =
+                ((int)retryAfter.TotalSeconds).ToString(NumberFormatInfo.InvariantInfo);
+
+        var problemDetailsService = context.HttpContext.RequestServices
+            .GetRequiredService<IProblemDetailsService>();
+
+        await problemDetailsService.TryWriteAsync(new ProblemDetailsContext
+        {
+            HttpContext = context.HttpContext,
+            ProblemDetails = new ProblemDetails
+            {
+                Status = StatusCodes.Status429TooManyRequests,
+                Title = "Too many requests",
+                Detail = "Rate limit exceeded. Please retry later."
+            }
+        });
+    };
+});
+
 var app = builder.Build();
 
-if (app.Environment.IsDevelopment())
-{
-   
-}
+// Route unhandled exceptions through GlobalExceptionHandler before anything else.
+app.UseExceptionHandler();
 
+// OpenAPI document and Scalar UI are intentionally exposed in every environment:
+// the API is meant for agents and self-hosted LAN deployments, where the schema
+// is part of the product surface.
 app.MapOpenApi();
 app.MapScalarApiReference(options =>
 {
@@ -51,6 +143,15 @@ app.MapScalarApiReference(options =>
 
 //app.UseHttpsRedirection();
 //app.UseAuthorization();
+app.UseRateLimiter();
+
+// Health endpoint is intentionally left off the rate limiter (no policy attached) so probes
+// from Docker/orchestrators are never throttled.
+app.MapHealthChecks("/health");
+
 app.MapControllers();
 
 app.Run();
+
+// Exposes the implicit entry-point class to WebApplicationFactory<Program> in integration tests.
+public partial class Program { }

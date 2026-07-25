@@ -1,6 +1,13 @@
 """Constants for the Weather4Agents integration."""
 
+from urllib.parse import quote
+
 DOMAIN = "weather4agents"
+
+
+def forecast_week_url(base_url: str, location: str) -> str:
+    """Build the week-forecast endpoint URL, URL-encoding the location."""
+    return f"{base_url.rstrip('/')}/api/weather/{quote(location, safe='')}/forecast/week"
 
 CONF_BASE_URL = "base_url"
 CONF_LOCATION = "location"
@@ -36,6 +43,7 @@ CONDITION_MAP: dict[str, str] = {
     "Overcast": "cloudy",
     "Foggy": "fog",
     "Rainy": "rainy",
+    "LightRain": "rainy",
     "ProbablyRainy": "rainy",
     "HeavyRain": "pouring",
     "Thunderstorm": "lightning-rainy",
