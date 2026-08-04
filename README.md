@@ -1,14 +1,36 @@
-# Weather4Agents 🤖
+<div align="center">
+
+# 🤖 Weather4Agents
+
+**Weather data from your favourite provider, ready for your agents and your smart home.**
+
+[![Docker Hub](https://img.shields.io/docker/v/giogdev/weather4agents?sort=semver&logo=docker&logoColor=white&label=Docker%20Hub&color=2496ED)](https://hub.docker.com/r/giogdev/weather4agents)
+[![Docker Pulls](https://img.shields.io/docker/pulls/giogdev/weather4agents?logo=docker&logoColor=white&label=pulls&color=2496ED)](https://hub.docker.com/r/giogdev/weather4agents/tags)
+[![Image Size](https://img.shields.io/docker/image-size/giogdev/weather4agents/latest?logo=docker&logoColor=white&label=image%20size&color=2496ED)](https://hub.docker.com/r/giogdev/weather4agents/tags)
+[![Pipeline](https://github.com/giogdev/weather-4-agents/actions/workflows/pipeline.yml/badge.svg)](https://github.com/giogdev/weather-4-agents/actions/workflows/pipeline.yml)
+[![.NET](https://img.shields.io/badge/.NET-10.0-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com)
+[![License: GPL v3](https://img.shields.io/badge/license-GPL--3.0-brightgreen)](LICENSE)
+
+</div>
+
 Tool developed to scrape weather data from your favourite weather website.
 
 I use this tool to display data in **Home Assistant** and to quickly provide weather data to my agents (e.g. 🦞 **OpenClaw** or n8n), without consuming too many tokens.
 For this second purpose, I generate JSON files with weather data, so that my agents know where to retrieve the information.
 
 ## Features
-- **REST API** — multi-day forecast and single-day weather, with support for multiple providers. Scalar UI available at `<endpoint>/scalar/v1`. The full contract is documented in [docs/api.md](docs/api.md).
-- **File system storage** — Saves the forecast to JSON files on the file system, see [dedicated section](docs/jobs.md).
+- **REST API** — multi-day forecast, single day (by date or `today`) and the next 24 hours as hourly slots, with a pluggable provider model (`?provider=`). OpenAPI document at `<endpoint>/openapi/v1.json`, interactive Scalar UI at `<endpoint>/scalar/v1`. Full contract in [docs/api.md](docs/api.md).
+- **Scheduled scraping** — a single background job scrapes every configured location per provider on a configurable interval, and reseeds the cache from the JSON files on disk at startup so forecasts are servable immediately after a restart. See [docs/jobs.md](docs/jobs.md).
+- **File system storage** — writes the forecast to JSON files (one file per location per day, written atomically), ready to be read directly by an agent without any HTTP call. Optional cleanup of past days. See [docs/jobs.md](docs/jobs.md).
+- **Ready-made integrations** — a native **Home Assistant** weather entity, plus JSON-file or API consumption for 🦞 **OpenClaw** and n8n. See [Integrations](#integrations).
 
 ## Getting started
+The image is published on Docker Hub as [`giogdev/weather4agents`](https://hub.docker.com/r/giogdev/weather4agents):
+
+```bash
+docker pull giogdev/weather4agents:latest
+```
+
 The Docker assets live in the [`docker/`](docker/) directory.
 1. From the `docker/` directory, copy the template to `.env`:
     ```bash
@@ -49,6 +71,7 @@ Configurable parameters (`docker/.env`)
 > ℹ️ File storage is written as the final step of the scraping cycle — there is no separate storage
 > schedule. See [docs/jobs.md](docs/jobs.md) for the job model and [docs/docker.md](docs/docker.md)
 > for more Docker details.
+
 ## Configuration and secrets
 Environment-specific settings are loaded through the standard ASP.NET Core mechanism
 (`appsettings.{Environment}.json`, selected by `ASPNETCORE_ENVIRONMENT`).
@@ -61,7 +84,8 @@ committed to a public repository. Use instead:
 
 Any secret that ends up in a commit must be considered compromised and rotated immediately,
 even if the file is later removed or gitignored.
-## Available providers:
+
+## Available providers
 | Provider | Name | Status |
 |---|---|---|
 | [3bMeteo](https://www.3bmeteo.com) | `3bMeteo` | ✅ Implemented |
@@ -69,6 +93,7 @@ even if the file is later removed or gitignored.
 > ⚠️ Data is obtained by scraping the provider's public pages. Please read
 > [docs/scraping.md](docs/scraping.md) for the responsible-use guidance (User-Agent, robots/ToS,
 > recommended minimum scraping interval) before deploying.
+
 ## Scheduled jobs
 [See the documentation here](docs/jobs.md)
 
@@ -88,4 +113,15 @@ You can consume the APIs to get weather data.
 
 # Changelog
 See [CHANGELOG.md](CHANGELOG.md) for the full version history.
+
+# License
+Copyright (C) 2026 Giorgio
+
+This program is free software: you can redistribute it and/or modify it under the terms of the
+**GNU General Public License version 3** as published by the Free Software Foundation, either
+version 3 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without
+even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+[GNU General Public License](LICENSE) for more details.
 
