@@ -7,10 +7,12 @@ namespace Weather4Agents.Application.UseCases.GetWeekForecast;
 public class GetWeekForecastHandler : IQueryHandler<GetWeekForecastQuery, WeekForecastResponse>
 {
     private readonly IWeatherProviderResolver _resolver;
+    private readonly TimeProvider _timeProvider;
 
-    public GetWeekForecastHandler(IWeatherProviderResolver resolver)
+    public GetWeekForecastHandler(IWeatherProviderResolver resolver, TimeProvider timeProvider)
     {
         _resolver = resolver;
+        _timeProvider = timeProvider;
     }
 
     public async Task<WeekForecastResponse> HandleAsync(GetWeekForecastQuery query, CancellationToken ct)
@@ -19,23 +21,21 @@ public class GetWeekForecastHandler : IQueryHandler<GetWeekForecastQuery, WeekFo
             ? _resolver.GetByName(query.ProviderName)
             : _resolver.GetDefault();
 
-        var allDays = await scraper.GetForecastAsync(query.Location, forceRefresh: false, ct);
+        var scraped = await scraper.GetForecastOrNotFoundAsync(query.Location, ct);
 
-        var today = DateOnly.FromDateTime(DateTime.Today);
-        var forecast = allDays
+        // "Today" in the provider's timezone: around midnight the host-timezone date (e.g. a UTC
+        // container) lags the provider's and would resurrect an already-past day.
+        var today = scraper.GetLocalToday(_timeProvider);
+        var forecast = scraped.Days
             .Where(d => d.Date >= today)
             .OrderBy(d => d.Date)
             .Take(7)
-            .Select(d => new DayForecastEntry
-            {
-                Date = d.Date,
-                ReliabilityPerc = d.ReliabilityPerc,
-                HoursDetails = d.HoursDetails
-            });
+            .Select(DayForecastEntry.From);
 
         return new WeekForecastResponse
         {
-            LastUpdatedAt = DateTimeOffset.UtcNow,
+            LastUpdatedAt = scraped.ScrapedAt,
+            Timezone = scraper.TimeZone.Id,
             Forecast = forecast
         };
     }

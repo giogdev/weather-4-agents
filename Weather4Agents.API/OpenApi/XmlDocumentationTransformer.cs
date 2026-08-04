@@ -1,8 +1,9 @@
+using System.Reflection;
+using System.Xml;
+using System.Xml.XPath;
 using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.AspNetCore.OpenApi;
 using Microsoft.OpenApi;
-using System.Reflection;
-using System.Xml.XPath;
 
 namespace Weather4Agents.API.OpenApi;
 
@@ -20,8 +21,10 @@ internal sealed class XmlDocumentationTransformer : IOpenApiOperationTransformer
         if (!File.Exists(xmlPath))
             return;
 
-        var document = new XPathDocument(xmlPath);
-        _navigator = document.CreateNavigator();
+        // Load through an XmlReader (DTD processing prohibited by default) rather than passing the
+        // path straight to XPathDocument, so a crafted doc file cannot trigger DTD/XXE processing.
+        using var reader = XmlReader.Create(xmlPath);
+        _navigator = new XPathDocument(reader).CreateNavigator();
     }
 
     public Task TransformAsync(OpenApiOperation operation, OpenApiOperationTransformerContext context, CancellationToken cancellationToken)

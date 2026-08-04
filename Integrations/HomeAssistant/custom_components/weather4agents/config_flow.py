@@ -11,6 +11,7 @@ import voluptuous as vol
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import (
     CONF_BASE_URL,
@@ -19,6 +20,7 @@ from .const import (
     DEFAULT_LOCATION,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
+    forecast_week_url,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -36,17 +38,16 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
 
 async def _validate_connection(hass: HomeAssistant, data: dict[str, Any]) -> None:
     """Validate that the API is reachable and the location exists."""
-    base_url = data[CONF_BASE_URL].rstrip("/")
-    location = data[CONF_LOCATION]
-    url = f"{base_url}/api/weather/{location}/forecast/week"
+    url = forecast_week_url(data[CONF_BASE_URL], data[CONF_LOCATION])
 
+    session = async_get_clientsession(hass)
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
-                if resp.status == 404:
-                    raise InvalidLocation
-                if resp.status != 200:
-                    raise CannotConnect
+        async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+            # The API returns a real 404 for an unknown location (see API ticket 07).
+            if resp.status == 404:
+                raise InvalidLocation
+            if resp.status != 200:
+                raise CannotConnect
     except aiohttp.ClientError as err:
         raise CannotConnect from err
 
@@ -62,6 +63,14 @@ class Weather4AgentsConfigFlow(ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
+            # Normalize so dedup, storage and queries all use the same value.
+            user_input[CONF_BASE_URL] = user_input[CONF_BASE_URL].rstrip("/")
+            user_input[CONF_LOCATION] = user_input[CONF_LOCATION].strip().lower()
+            await self.async_set_unique_id(
+                f"{user_input[CONF_BASE_URL]}::{user_input[CONF_LOCATION]}"
+            )
+            self._abort_if_unique_id_configured()
+
             try:
                 await _validate_connection(self.hass, user_input)
             except CannotConnect:

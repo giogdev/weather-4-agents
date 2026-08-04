@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Text;
 using Weather4Agents.Domain.Enums;
@@ -21,7 +21,7 @@ namespace Weather4Agents.Domain.Entities
         /// <summary>
         /// Type of weather (e.g., sunny, cloudy, rainy)
         /// </summary>
-        public string WeatherType { get; set; } = Weather4Agents.Domain.Enums.WeatherType.Unknown;
+        public WeatherType WeatherType { get; set; } = WeatherType.Unknown;
         /// <summary>
         /// Weather description from provider website
         /// </summary>

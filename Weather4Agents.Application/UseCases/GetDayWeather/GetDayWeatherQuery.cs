@@ -1,5 +1,5 @@
 using Weather4Agents.Application.CQRS;
-using Weather4Agents.Domain.Entities;
+using Weather4Agents.Application.DTOs;
 
 namespace Weather4Agents.Application.UseCases.GetDayWeather;
 
@@ -7,4 +7,4 @@ namespace Weather4Agents.Application.UseCases.GetDayWeather;
 /// <param name="Date">The specific day to retrieve.</param>
 /// <param name="ProviderName">Optional provider name. If null, the default provider is used.</param>
 public record GetDayWeatherQuery(string Location, DateOnly Date, string? ProviderName)
-    : IQuery<DayWeather?>;
+    : IQuery<DayWeatherResponse?>;

@@ -3,23 +3,67 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Weather4Agents.Application.Interfaces.Scrapers;
 using Weather4Agents.Application.Settings;
+using Weather4Agents.Infrastructure.Diagnostics;
 using Weather4Agents.Infrastructure.Jobs;
 using Weather4Agents.Infrastructure.Resolvers;
 using Weather4Agents.Infrastructure.Scrapers;
+using Weather4Agents.Infrastructure.Storage;
 
 namespace Weather4Agents.Infrastructure;
 
 public static class DependencyInjection
 {
+    // The retry sequence needs a total budget larger than a single attempt, and the circuit
+    // breaker's sampling window must be at least twice the attempt timeout (a handler validation
+    // rule). Both are expressed as multiples of the configured per-attempt timeout.
+    private const int TotalRequestTimeoutMultiplier = 3;
+    private const int CircuitBreakerSamplingMultiplier = 2;
+
     public static IServiceCollection AddInfrastructure(
         this IServiceCollection services,
         IConfiguration configuration)
     {
-        services.Configure<WeatherScrapingSettings>(
-            configuration.GetSection(WeatherScrapingSettings.SectionName));
+        // Settings are validated with DataAnnotations and checked at startup so that an
+        // invalid configuration (e.g. a non-positive job interval, a missing default provider,
+        // or a default provider absent from the enabled list) fails fast with a clear message
+        // instead of crashing the host mid-run or hammering the provider.
+        services.AddOptions<WeatherScrapingSettings>()
+            .Bind(configuration.GetSection(WeatherScrapingSettings.SectionName))
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
 
-        // Typed HTTP clients
-        services.AddHttpClient<Meteo3bScraper>();
+        // Metrics meter and the scrape-cycle tracker are process-wide singletons: the meter emits
+        // to any listener, and the tracker is shared between the writing job and the reading
+        // health check. AddMetrics registers the IMeterFactory that scopes the meter.
+        services.AddMetrics();
+        services.AddSingleton<WeatherMetrics>();
+        services.AddSingleton<ScrapeCycleTracker>();
+
+        services.AddSingleton<Meteo3bWeatherTypeMapper>();
+
+        // Typed HTTP clients. The per-request bound on a hanging page lives in the resilience
+        // handler's attempt timeout, not HttpClient.Timeout: a low client timeout wraps the whole
+        // pipeline and would preempt the retries below. The timeout value is read straight from the
+        // same configuration section that WeatherScrapingSettings binds — an out-of-range value is
+        // rejected by that settings type's ValidateOnStart before the host ever starts. (Coupling
+        // this to IOptions<WeatherScrapingSettings> is deliberately avoided: it would make the two
+        // validated options cross-trigger and turn a clean startup error into an AggregateException.)
+        var httpTimeout = TimeSpan.FromSeconds(
+            configuration
+                .GetSection(WeatherScrapingSettings.SectionName)
+                .GetValue(nameof(WeatherScrapingSettings.HttpTimeoutSeconds),
+                    new WeatherScrapingSettings().HttpTimeoutSeconds));
+
+        services.AddHttpClient<Meteo3bScraper>()
+            .AddStandardResilienceHandler(options =>
+            {
+                // Abandon a hanging request within the configured timeout, per attempt.
+                options.AttemptTimeout.Timeout = httpTimeout;
+                // The total budget caps the whole retry sequence so a persistently slow page
+                // cannot stall the cycle for minutes.
+                options.TotalRequestTimeout.Timeout = httpTimeout * TotalRequestTimeoutMultiplier;
+                options.CircuitBreaker.SamplingDuration = httpTimeout * CircuitBreakerSamplingMultiplier;
+            });
 
         // Register each scraper also as IWeatherProviderScraper for IEnumerable<> resolution
         services.AddTransient<IWeatherProviderScraper>(
@@ -29,18 +73,26 @@ public static class DependencyInjection
 
         services.AddHybridCache(options =>
         {
+            // Fallback only: weather entries are written with explicit per-segment options by
+            // BaseWeatherScraper (today = short TTL, following days = longer TTL, empty = negative
+            // TTL). This default applies to any hypothetical entry written without options.
             options.DefaultEntryOptions = new HybridCacheEntryOptions
             {
-                Expiration = TimeSpan.FromHours(24),
-                LocalCacheExpiration = TimeSpan.FromHours(24)
+                Expiration = TimeSpan.FromHours(6),
+                LocalCacheExpiration = TimeSpan.FromHours(6)
             };
         });
 
-        services.Configure<WeatherFileStorageSettings>(
-            configuration.GetSection(WeatherFileStorageSettings.SectionName));
+        services.AddOptions<WeatherFileStorageSettings>()
+            .Bind(configuration.GetSection(WeatherFileStorageSettings.SectionName))
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+
+        // File storage is a step of the scraping job (Option A: one schedule), not a separate
+        // hosted service. The store is resolved per scope from within that job.
+        services.AddTransient<WeatherFileStore>();
 
         services.AddHostedService<WeatherScrapingJob>();
-        services.AddHostedService<WeatherFileStorageJob>();
 
         return services;
     }

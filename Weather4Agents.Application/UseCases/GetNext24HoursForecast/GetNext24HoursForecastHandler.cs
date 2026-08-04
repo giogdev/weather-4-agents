@@ -7,10 +7,12 @@ namespace Weather4Agents.Application.UseCases.GetNext24HoursForecast;
 public class GetNext24HoursForecastHandler : IQueryHandler<GetNext24HoursForecastQuery, Next24HoursForecastResponse>
 {
     private readonly IWeatherProviderResolver _resolver;
+    private readonly TimeProvider _timeProvider;
 
-    public GetNext24HoursForecastHandler(IWeatherProviderResolver resolver)
+    public GetNext24HoursForecastHandler(IWeatherProviderResolver resolver, TimeProvider timeProvider)
     {
         _resolver = resolver;
+        _timeProvider = timeProvider;
     }
 
     public async Task<Next24HoursForecastResponse> HandleAsync(GetNext24HoursForecastQuery query, CancellationToken ct)
@@ -19,12 +21,14 @@ public class GetNext24HoursForecastHandler : IQueryHandler<GetNext24HoursForecas
             ? _resolver.GetByName(query.ProviderName)
             : _resolver.GetDefault();
 
-        var allDays = await scraper.GetForecastAsync(query.Location, forceRefresh: false, ct);
+        var scraped = await scraper.GetForecastOrNotFoundAsync(query.Location, ct);
 
-        var now = DateTime.Now;
+        // The provider's slot dates/times are local to its timezone, so the window bounds must be
+        // too: a host-timezone "now" (e.g. a UTC container) would shift the window by hours.
+        var now = scraper.GetLocalNow(_timeProvider);
         var windowEnd = now.AddHours(24);
 
-        var hours = allDays
+        var hours = scraped.Days
             .SelectMany(d => d.HoursDetails.Select(h => new
             {
                 d.Date,
@@ -48,7 +52,8 @@ public class GetNext24HoursForecastHandler : IQueryHandler<GetNext24HoursForecas
 
         return new Next24HoursForecastResponse
         {
-            LastUpdatedAt = DateTimeOffset.UtcNow,
+            LastUpdatedAt = scraped.ScrapedAt,
+            Timezone = scraper.TimeZone.Id,
             Hours = hours
         };
     }

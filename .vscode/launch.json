@@ -8,7 +8,7 @@
             "name": "C#: WeatherAgents.Api Debug",
             "type": "dotnet",
             "request": "launch",
-            "projectPath": "${workspaceFolder}/WeatherAgents.API/Weather4Agents.API.csproj"
+            "projectPath": "${workspaceFolder}/Weather4Agents.API/Weather4Agents.API.csproj"
         },
     ]
 }
